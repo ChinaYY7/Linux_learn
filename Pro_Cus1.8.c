@@ -1,7 +1,5 @@
 //time ./Pro_Cus1.7.out /mnt/f/Linux_code/tmp/11.mp4 /mnt/f/Linux_code/tmp/22.mp4
 //time ./Pro_Cus1.7.out /mnt/f/Linux_code/tmp/tmp.c /mnt/f/Linux_code/tmp/tmp1.c
-//md5sum ../tmp/tmp1.c ../tmp/tmp.c
-//gdb Pro_Cus1.7.out
 //set args /mnt/f/Linux_code/tmp/tmp.c /mnt/f/Linux_code/tmp/tmp1.c
 //display /x {str[0],str[1],str[2],str[3]}
 //使用文件偏移量
