@@ -338,8 +338,8 @@ int main(int argc, char const *argv[])
         }
         fclose(Cus_fp);
         close(Cus_FIFO_fd);
-        //close(Cus_Pipe_end_fd);
-        //close(Cus_Pipe_fd);
+        Close_Tell_Wait_pipe(Cus_Pipe_end_fd);
+        Close_Tell_Wait_pipe(Cus_Pipe_fd);
         exit(EXIT_SUCCESS);
     }
     
