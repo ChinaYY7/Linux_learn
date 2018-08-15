@@ -10,12 +10,9 @@
 #include <sys/wait.h>
 #include <sys/shm.h>
 #define FIFO_path "/home/mr_yy/Program/FIFO/fifo"
-#define Pro_FIFO_path "/home/mr_yy/Program/FIFO/fifo1"
-#define Cus_FIFO_path "/home/mr_yy/Program/FIFO/fifo2"
-#define BUFFER_SIZE 4096 //FIFO大小4096，流缓冲大小8192  //需设为管道大小的整数倍
+#define BUFFER_SIZE 8192 //FIFO大小4096，流缓冲大小8192  //需设为管道大小的整数倍
 #define SHM_SIZE 4096
 #define SHM_MODE 0600 //USR read and write
-//#define BUFFER_SIZE PIPE_BUF //4096
 #define Pro_child_Num 5
 #define Cus_child_Num 5
 
@@ -62,6 +59,13 @@ void Tell_pipe(int *fd, int num)
             Error_Exit("Write pipe error\n");
         num--;
     }
+}
+
+//关闭pipe
+void Close_Tell_Wait_pipe(int *fd)
+{
+    close(fd[0]);
+    close(fd[1]);
 }
 
 //字符转整型
@@ -214,8 +218,8 @@ int main(int argc, char const *argv[])
             printf("--Producer_child[%d] end\n", Pro_pid[0]);
         }
         close(Pro_fd);
-        //close(Pro_Pipe_fd);
-        //close(Pro_Pipe_end_fd);
+        Close_Tell_Wait_pipe(Pro_Pipe_end_fd);
+        Close_Tell_Wait_pipe(Pro_Pipe_fd);
         close(Pro_FIFO_fd);
         exit(EXIT_SUCCESS);
     }
