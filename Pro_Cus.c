@@ -1,13 +1,20 @@
-//time ./Pro_Cus1.4.out /mnt/f/Linux_code/tmp/11.mp4 /mnt/f/Linux_code/tmp/22.mp4
-//time ./Pro_Cus1.6.out /mnt/f/Linux_code/tmp/tmp.c /mnt/f/Linux_code/tmp/tmp1.c
+//time ./Pro_Cus1.5.out /mnt/f/Linux_code/tmp/11.mp4 /mnt/f/Linux_code/tmp/22.mp4
+//time ./Pro_Cus1.5.out /mnt/f/Linux_code/tmp/tmp /mnt/f/Linux_code/tmp/tmp1
 //md5sum ../tmp/tmp1.c ../tmp/tmp.c
+//gdb Pro_Cus1.5.out
+//set args /mnt/f/Linux_code/tmp/tmp /mnt/f/Linux_code/tmp/tmp1
+//display /x {str[0],str[1],str[2],str[3]}
+//加入共享存储
 #include "apue.h"
 #include <sys/time.h> 
 #include <sys/wait.h>
+#include <sys/shm.h>
 #define FIFO_path "/home/mr_yy/Program/FIFO/fifo"
 #define Pro_FIFO_path "/home/mr_yy/Program/FIFO/fifo1"
 #define Cus_FIFO_path "/home/mr_yy/Program/FIFO/fifo2"
 #define BUFFER_SIZE 4096 //FIFO大小4096，流缓冲大小8192  //需设为管道大小的整数倍
+#define SHM_SIZE 4096
+#define SHM_MODE 0600 //USR read and write
 //#define BUFFER_SIZE PIPE_BUF //4096
 #define Pro_child_Num 5
 #define Cus_child_Num 5
@@ -43,15 +50,29 @@ void Tell_pipe(int *fd)
     if (write(fd[1],"c",1) != 1)
         Error_Exit("Write pipe error!\n\n");
 }
+long int CtoI32(unsigned char *str, int addr)
+{
+    addr *= 4;
+    return (str[0 + addr] | str[1 + addr] << 8 | str[2 + addr] << 16 | str[3 + addr] << 24);
+}
+void ItoC32(unsigned char *str, long int num, int addr)
+{
+    addr *= 4;
+    str[0 + addr] = num;
+    str[1 + addr] = num >> 8;
+    str[2 + addr] = num >> 16;
+    str[3 + addr] = num >> 24;
+}
 //主程序
 int main(int argc, char const *argv[])
 {
     pid_t pid[3],MD5_pid;  
     int res;
     int End = 2;
+    int shmid;
+    char *shmptr;
     struct timeval start,finish;
-    int Pro_child_FIFO_fd;
-    char Pro_date[2] = {0,0};
+    long int temp1 = 68273874,temp2 = 0;
 
     gettimeofday(&start,NULL);//获取程序开始时间
 
@@ -62,18 +83,15 @@ int main(int argc, char const *argv[])
         exit(EXIT_FAILURE);
     }
 
-    //管道是否存在以及创建有名管道FIFO,子进程间通讯
-    if((mkfifo(Pro_FIFO_path, FILE_MODE)) < 0 && (errno != EEXIST))
-        Error_Exit("Can not creat FIFO\n");
-
-    if ((Pro_child_FIFO_fd = open(Pro_FIFO_path, O_RDWR)) == -1)
-        Error_Exit("Open fifo error\n");
-    if(write(Pro_child_FIFO_fd, Pro_date, 1) == -1)
-        Error_Exit("Write FIFO error\n");
-
     //管道是否存在以及创建有名管道FIFO
     if((mkfifo(FIFO_path, FILE_MODE)) < 0 && (errno != EEXIST))
         Error_Exit("Can not creat FIFO\n");
+
+    //创建共享存储区
+    if((shmid = shmget(IPC_PRIVATE,SHM_SIZE,SHM_MODE)) < 0)
+        Error_Exit("Shmget error\n");
+    if((shmptr = shmat(shmid, 0, 0)) == (void *)-1)
+        Error_Exit("shmat error\n");
     
     //创建生产者进程
     if((pid[1] = fork()) < 0)
@@ -91,6 +109,9 @@ int main(int argc, char const *argv[])
         static int Pro_Pipe_fd[2];
         char Pro_chr;
 
+        //共享存储区清空
+        ItoC32(shmptr,0,0);
+        
         //创建无名管道
         Tell_Wait_pipe(Pro_Pipe_fd);
 
@@ -115,25 +136,23 @@ int main(int argc, char const *argv[])
             else if(Pro_pid[i] == 0)
             {
                 int Pro_count;
-                long int Pro_bytes;
+                long int Pro_bytes,Pro_bytes_sum;
                 char Pro_buffer[BUFFER_SIZE + 1];
+                
                 printf("----Producer_child[%d]<%d> created successfully\n", i, getpid());
                 Pro_bytes = 0;
                 while(1)
                 {
-                    while(read(Pro_child_FIFO_fd, Pro_date, 1) == 0)
-                    {
-                        if(errno != EAGAIN)
-                            break;
-                    }
-                    Pro_date[0]++;
-                    if(write(Pro_child_FIFO_fd, Pro_date, 1) == -1)
-                        Error_Exit("Write FIFO error\n");
                     //互斥
                     Wait_pipe(Pro_Pipe_fd);
                     Pro_count = fread(Pro_buffer,sizeof(char),BUFFER_SIZE,Pro_fp);
                     if(write(Pro_FIFO_fd, Pro_buffer, Pro_count) == -1)
                         Error_Exit("Write FIFO error\n");
+
+                    Pro_bytes_sum = CtoI32(shmptr,0); //从共享区0取数据
+                    Pro_bytes_sum += Pro_count;
+                    ItoC32(shmptr,Pro_bytes_sum,0);//写入共享区0
+                    
                     Tell_pipe(Pro_Pipe_fd);
                     //互斥
                     Pro_bytes += Pro_count;
@@ -145,9 +164,7 @@ int main(int argc, char const *argv[])
                         else
                             break;  
                     }
-                    printf("Pro_date:%d\n",Pro_date[0]);
                 }
-                
                 printf("----Producer_child[%d]<%d> have written %ld bytes \n", i, getpid(), Pro_bytes);
                 exit(EXIT_SUCCESS);
             }
@@ -160,6 +177,7 @@ int main(int argc, char const *argv[])
             Pro_End--;
             printf("--Producer_child[%d] end\n", Pro_pid[0]);
         }
+
         fclose(Pro_fp);
         close(Pro_FIFO_fd);
         exit(EXIT_SUCCESS);
@@ -183,7 +201,9 @@ int main(int argc, char const *argv[])
         int Cus_End = Cus_child_Num;
         static int Cus_Pipe_fd[2];
         char Cus_chr;
-        long int cus_wcount;
+
+        //共享存储区清空
+        ItoC32(shmptr,0,1);
 
         //创建无名管道
         Tell_Wait_pipe(Cus_Pipe_fd);
@@ -209,7 +229,7 @@ int main(int argc, char const *argv[])
             else if(Cus_pid[j]==0)
             {
                 int Cus_count;
-                long int Cus_bytes;
+                long int Cus_bytes, Cus_bytes_sum;
                 char Cus_buffer[BUFFER_SIZE + 1];
                 printf("----Customer_child[%d]<%d> created successfully\n", j, getpid());
                 Cus_bytes = 0;
@@ -219,8 +239,11 @@ int main(int argc, char const *argv[])
                     Wait_pipe(Cus_Pipe_fd);
                     if((Cus_count = read(Cus_FIFO_fd, Cus_buffer, BUFFER_SIZE)) == -1)
                         Error_Exit("Read FIFO error\n");
-                    cus_wcount = fwrite(Cus_buffer,sizeof(char),Cus_count,Cus_fp);
-                    printf("-----------------------------------------cus_wcount<%d> : %ld\n",getpid(),cus_wcount);
+                    fwrite(Cus_buffer,sizeof(char),Cus_count,Cus_fp);
+
+                    Cus_bytes_sum = CtoI32(shmptr,1);
+                    Cus_bytes_sum += Cus_count;
+                    ItoC32(shmptr,Cus_bytes_sum,1);
                     //必须冲洗缓冲区，不然多进程读会出现在缓冲区数据的次序不一致
                     if(fflush(Cus_fp) != 0)
                         Error_Exit("fflush error\n");
@@ -262,9 +285,8 @@ int main(int argc, char const *argv[])
 
     gettimeofday(&finish,NULL);
     printf("\nCopy complated !\ntime = %.3f s\n",(double)((finish.tv_sec-start.tv_sec) * 1000000 + (finish.tv_usec-start.tv_usec)) / 1000000);
-
-    //printf("Producer write %ld KB\n ", Write_bytes);
-    //printf("Customer read %ld KB\n", Read_bytes);
+    printf("Producer write %ld KB\n", CtoI32(shmptr,0) / 1024);
+    printf("Customer read %ld KB\n", CtoI32(shmptr,1) / 1024);
 
     //md5计算
     if((MD5_pid = fork()) < 0)
