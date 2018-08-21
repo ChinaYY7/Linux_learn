@@ -1,22 +1,15 @@
-//time ./Pro_Cus1.7.out /mnt/f/Linux_code/tmp/11.mp4 /mnt/f/Linux_code/tmp/22.mp4
-//time ./Pro_Cus1.7.out /mnt/f/Linux_code/tmp/tmp.c /mnt/f/Linux_code/tmp/tmp1.c
-//gdb Pro_Cus1.7.out
-//set args /mnt/f/Linux_code/tmp/tmp.c /mnt/f/Linux_code/tmp/tmp1.c
-//display /x {str[0],str[1],str[2],str[3]}
-//更改fread为read  修正1.6的问题
-//Copy complated !
-//time = 25.598 s
+//./Pro_Cus1.8_relase.out /mnt/f/Linux_code/tmp/11.mp4 /mnt/f/Linux_code/tmp/22.mp4
+//./Pro_Cus1.8_relase.out /home/yy/Pro_Cus/tmp.c /home/yy/Pro_Cus/tmp1.c
 #include "apue.h"
 #include <sys/time.h> 
 #include <sys/wait.h>
 #include <sys/shm.h>
 #define FIFO_path "/home/mr_yy/Program/FIFO/fifo"
-#define BUFFER_SIZE 8192 //FIFO大小4096，流缓冲大小8192  //需设为管道大小的整数倍
+#define BUFFER_SIZE 8192 //FIFO大小4096，流缓冲大小8192， 每次操作的buffer大小，因为FIFO的愿意，超过4096时最好保证时4096的整数倍
 #define SHM_SIZE 4096
 #define SHM_MODE 0600 //USR read and write
-//#define BUFFER_SIZE PIPE_BUF //4096
-#define Pro_child_Num 5
-#define Cus_child_Num 5
+#define Pro_child_Num 3 //生产者进程数
+#define Cus_child_Num 3 //消费者进程数
 
 
 //出错处理
@@ -27,27 +20,47 @@ void Error_Exit(const char *str)
 }
 
 //创建pipe
-void Tell_Wait_pipe(int *fd)
+void Tell_Wait_pipe(int *fd, int num)
 {
     if (pipe(fd) < 0)
         Error_Exit("Creat pipe error\n");
-    if (write(fd[1],"c",1) != 1)
-        Error_Exit("Write pipe error\n");
+    while(num)
+    {
+        if (write(fd[1],"c",1) != 1)
+            Error_Exit("Write pipe error\n");
+        num--;
+    }
 }
 
 //读pipe
-void Wait_pipe(int *fd)
+void Wait_pipe(int *fd, int num)
 {
     char temp;
-    if (read(fd[0], &temp, 1) != 1)
-        Error_Exit("Read pipe error\n");
+
+    while(num)
+    {
+        if (read(fd[0], &temp, 1) != 1)
+            Error_Exit("Read pipe error\n");
+        num--;
+    }
 }
 
 //写pipe
-void Tell_pipe(int *fd)
+void Tell_pipe(int *fd, int num)
 {
-    if (write(fd[1],"c",1) != 1)
-        Error_Exit("Write pipe error!\n\n");
+    while(num)
+    {
+        if (write(fd[1],"c",1) != 1)
+            Error_Exit("Write pipe error\n");
+        num--;
+    }
+}
+
+//关闭pipe
+void Close_Tell_Wait_pipe(int *fd)
+{
+    close(fd[0]);
+    close(fd[1]);
 }
 
 //字符转整型
@@ -71,13 +84,10 @@ void ItoC32(unsigned char *str, long int num, int addr, int p)
 int main(int argc, char const *argv[])
 {
     pid_t pid[3],MD5_pid;  
-    int res;
     int End = 2;
     int shmid;
     char *shmptr;
     struct timeval start,finish;
-    long int temp1 = 68273874,temp2 = 0;
-
     double speed,Complate_time,Copy_data;
 
     gettimeofday(&start,NULL);//获取程序开始时间
@@ -100,6 +110,7 @@ int main(int argc, char const *argv[])
         Error_Exit("shmat error\n");
     
     printf("Copy......\n");
+
     //创建生产者进程
     if((pid[1] = fork()) < 0)
         Error_Exit("fork1 error\n");
@@ -110,18 +121,18 @@ int main(int argc, char const *argv[])
         int i;
         int Source_fd;
         int Pro_fd;
-        FILE *Pro_fp;
         int Pro_FIFO_fd;
         pid_t Pro_pid[Pro_child_Num + 1];
         int Pro_End = Pro_child_Num;
-        static int Pro_Pipe_fd[2];
+        static int Pro_Pipe_fd[2], Pro_Pipe_end_fd[2];
         char Pro_chr;
 
         //共享存储区清空
         ItoC32(shmptr,0,0,4);
         
-        //创建无名管道
-        Tell_Wait_pipe(Pro_Pipe_fd);
+        //创建无名管道，用于进程互斥
+        Tell_Wait_pipe(Pro_Pipe_fd,1);
+        Tell_Wait_pipe(Pro_Pipe_end_fd,0);
 
         //读打开源文件
         if ((Pro_fd = open(argv[1], O_RDONLY)) == -1)
@@ -142,44 +153,51 @@ int main(int argc, char const *argv[])
             else if(Pro_pid[i] == 0)
             {
                 int Pro_count;
-                long int Pro_bytes,Pro_bytes_sum;
+                long int Pro_bytes_sum;
                 char Pro_buffer[BUFFER_SIZE];
                 off_t file_position,file_position2;
                 
-                Pro_bytes = 0;
                 while(1)
                 {
-                    //互斥
-                    Wait_pipe(Pro_Pipe_fd);
+                    Wait_pipe(Pro_Pipe_fd,1); //上锁
 
+                    //生产者从源文件读取数据
                     file_position = lseek(Pro_fd,0,SEEK_CUR);
                     if((Pro_count = read(Pro_fd, Pro_buffer, BUFFER_SIZE - 4)) == -1)
                         Error_Exit("Read source file error\n");
+
                     if(Pro_count == 0)  //文件为空时 返回0
                     {
-                        Tell_pipe(Pro_Pipe_fd);
+                        Tell_pipe(Pro_Pipe_fd,1); //解锁
                         break;
                     }
-                    ItoC32(Pro_buffer,file_position,Pro_count,1);
-                    file_position2 = CtoI32(Pro_buffer,Pro_count,1);
+                    
+                    //将文件偏移量写入buf
+                    ItoC32(Pro_buffer,file_position,Pro_count,1); 
 
-                    if(write(Pro_FIFO_fd, Pro_buffer, Pro_count + 4) == -1)
-                        Error_Exit("Write FIFO error\n");
-
+                    //统计生产者从源文件中一共读取了多少字节
                     Pro_bytes_sum = CtoI32(shmptr,0,4); //从共享区0取数据
                     Pro_bytes_sum += Pro_count;
                     ItoC32(shmptr,Pro_bytes_sum,0,4);//写入共享区0
-                    
-                    Tell_pipe(Pro_Pipe_fd);
-                    //互斥
-                    Pro_bytes += Pro_count;
-                
-                    if(Pro_count != BUFFER_SIZE - 4) //到达文件尾端，Pro_count都可能小于BUFFER_SIZE - 4
+
+                    Tell_pipe(Pro_Pipe_fd,1); //解锁
+
+                    //将生产者从源文件读取的数据写入FIFO
+                    if(Pro_count == BUFFER_SIZE - 4)
                     {
-                        file_position = lseek(Pro_fd,0,SEEK_CUR);
+                        if(write(Pro_FIFO_fd, Pro_buffer, Pro_count + 4) == -1)
+                            Error_Exit("Write FIFO error\n");
+                    }
+                    else  //到达文件尾端，保证最后读到的数据最后写入管道
+                    {
+                        Wait_pipe(Pro_Pipe_end_fd,Pro_child_Num - 1); //等待其他的生产者子进程结束
+
+                        if(write(Pro_FIFO_fd, Pro_buffer, Pro_count + 4) == -1)
+                            Error_Exit("Write FIFO error\n");
                         break;
                     }
                 }
+                Tell_pipe(Pro_Pipe_end_fd,1); //告知写入文件最后一次数据的生产者子进程 当前子进程结束
                 exit(EXIT_SUCCESS);
             }
         }
@@ -190,9 +208,12 @@ int main(int argc, char const *argv[])
             Pro_pid[0] = wait(NULL);
             Pro_End--;
         }
-
-        fclose(Pro_fp);
+        
+        close(Pro_fd);
+        Close_Tell_Wait_pipe(Pro_Pipe_fd);
+        Close_Tell_Wait_pipe(Pro_Pipe_end_fd);
         close(Pro_FIFO_fd);
+
         exit(EXIT_SUCCESS);
     }
 
@@ -219,7 +240,7 @@ int main(int argc, char const *argv[])
         ItoC32(shmptr,0,1,4);
 
         //创建无名管道
-        Tell_Wait_pipe(Cus_Pipe_fd);
+        Tell_Wait_pipe(Cus_Pipe_fd,1);
         
         //创建目标文件并写打开
         if((Cus_fp = fopen(argv[2],"w")) == NULL)
@@ -239,59 +260,63 @@ int main(int argc, char const *argv[])
             else if(Cus_pid[j]==0)
             {
                 int Cus_count;
-                long int Cus_bytes, Cus_bytes_sum;
+                long int Cus_bytes_sum;
                 char Cus_buffer[BUFFER_SIZE + 1];
-                long int file_position,file_position2;
-                Cus_bytes = 0;
+                long int file_position,write_position;
+                long int cus_wcount;
+
                 while(1)
                 {
-                    //互斥
-                    Wait_pipe(Cus_Pipe_fd);
+                    //消费者从FIFO中读取数据
                     if((Cus_count = read(Cus_FIFO_fd, Cus_buffer, BUFFER_SIZE)) == -1)
                         Error_Exit("Read FIFO error\n");
                     if(Cus_count == 0)
                     {
                         if(errno != EAGAIN)
-                        {
-                            Tell_pipe(Cus_Pipe_fd);
                             break;
-                        }
-                        Tell_pipe(Cus_Pipe_fd);
                     }
                     else
                     {
-                        file_position = ftell(Cus_fp);
-                        file_position2 = CtoI32(Cus_buffer,Cus_count,1);
-                        fwrite(Cus_buffer,sizeof(char),Cus_count - 4,Cus_fp);
-                        Cus_bytes_sum = CtoI32(shmptr,1,4);
-                        Cus_bytes_sum += (Cus_count - 4);
-                        ItoC32(shmptr,Cus_bytes_sum,1,4);
+                        Wait_pipe(Cus_Pipe_fd,1);//上锁
+                        
+                        //从读取的数据中提取出文件偏移量
+                        write_position = CtoI32(Cus_buffer,Cus_count - 4,1);
+
+                        //写入目标文件
+                        fseek(Cus_fp,write_position,SEEK_SET);
+                        cus_wcount = fwrite(Cus_buffer,sizeof(char),Cus_count - 4,Cus_fp);
+                        printf("----cus_wcount<%d> : %ld\n",getpid(),cus_wcount);
+
                         //必须冲洗缓冲区，不然多进程读会出现在缓冲区数据的次序不一致
                         if(fflush(Cus_fp) != 0)
                             Error_Exit("fflush error\n");
 
-                        Tell_pipe(Cus_Pipe_fd);
-                        //互斥
-                        Cus_bytes += (Cus_count - 4);
-                        if(Cus_count  != BUFFER_SIZE)
-                        {
-                            file_position = ftell(Cus_fp);
+                        //统计消费者从管道中读取了多少字节
+                        Cus_bytes_sum = CtoI32(shmptr,1,4);
+                        Cus_bytes_sum += (Cus_count - 4);
+                        ItoC32(shmptr,Cus_bytes_sum,1,4);
+
+                        Tell_pipe(Cus_Pipe_fd,1);//解锁
+                    
+                        //到达文件尾
+                        if(Cus_count  != BUFFER_SIZE) 
                             break;
-                        }
                     }
                 }
                 exit(EXIT_SUCCESS);
             }
         }
-        
         //等待所有消费者子进程结束
         while(Cus_End)
         {
             Cus_pid[0] = wait(NULL);
             Cus_End--;
         }
+
         fclose(Cus_fp);
         close(Cus_FIFO_fd);
+        Close_Tell_Wait_pipe(Cus_Pipe_fd);
+
         exit(EXIT_SUCCESS);
     }
     
@@ -305,6 +330,7 @@ int main(int argc, char const *argv[])
     //删除FIFO
     unlink(FIFO_path);
 
+    //获取完成时的时间
     gettimeofday(&finish,NULL);
     Copy_data = CtoI32(shmptr,1,4) / 1024 / 1024;//MB
     Complate_time = (double)((finish.tv_sec-start.tv_sec) * 1000000 + (finish.tv_usec-start.tv_usec)) / 1000000;
