@@ -1,23 +1,22 @@
-//time ./Pro_Cus1.6.out /mnt/f/Linux_code/tmp/11.mp4 /mnt/f/Linux_code/tmp/22.mp4
-//time ./Pro_Cus1.6.out /mnt/f/Linux_code/tmp/tmp.c /mnt/f/Linux_code/tmp/tmp1.c
-//md5sum ../tmp/tmp1.c ../tmp/tmp.c
-//gdb Pro_Cus1.6.out
+//time ./Pro_Cus1.7.out /mnt/f/Linux_code/tmp/11.mp4 /mnt/f/Linux_code/tmp/22.mp4
+//time ./Pro_Cus1.7.out /mnt/f/Linux_code/tmp/tmp.c /mnt/f/Linux_code/tmp/tmp1.c
+//gdb Pro_Cus1.7.out
 //set args /mnt/f/Linux_code/tmp/tmp.c /mnt/f/Linux_code/tmp/tmp1.c
 //display /x {str[0],str[1],str[2],str[3]}
-//加入文件偏移量 文件描述符乱跳
+//更改fread为read  修正1.6的问题
+//Copy complated !
+//time = 25.598 s
 #include "apue.h"
 #include <sys/time.h> 
 #include <sys/wait.h>
 #include <sys/shm.h>
 #define FIFO_path "/home/mr_yy/Program/FIFO/fifo"
-#define Pro_FIFO_path "/home/mr_yy/Program/FIFO/fifo1"
-#define Cus_FIFO_path "/home/mr_yy/Program/FIFO/fifo2"
-#define BUFFER_SIZE 1004 //FIFO大小4096，流缓冲大小8192  //需设为管道大小的整数倍
+#define BUFFER_SIZE 8192 //FIFO大小4096，流缓冲大小8192  //需设为管道大小的整数倍
 #define SHM_SIZE 4096
 #define SHM_MODE 0600 //USR read and write
 //#define BUFFER_SIZE PIPE_BUF //4096
-#define Pro_child_Num 2
-#define Cus_child_Num 2
+#define Pro_child_Num 5
+#define Cus_child_Num 5
 
 
 //出错处理
@@ -79,6 +78,8 @@ int main(int argc, char const *argv[])
     struct timeval start,finish;
     long int temp1 = 68273874,temp2 = 0;
 
+    double speed,Complate_time,Copy_data;
+
     gettimeofday(&start,NULL);//获取程序开始时间
 
     //检查参数
@@ -98,6 +99,7 @@ int main(int argc, char const *argv[])
     if((shmptr = shmat(shmid, 0, 0)) == (void *)-1)
         Error_Exit("shmat error\n");
     
+    printf("Copy......\n");
     //创建生产者进程
     if((pid[1] = fork()) < 0)
         Error_Exit("fork1 error\n");
@@ -107,6 +109,7 @@ int main(int argc, char const *argv[])
     {
         int i;
         int Source_fd;
+        int Pro_fd;
         FILE *Pro_fp;
         int Pro_FIFO_fd;
         pid_t Pro_pid[Pro_child_Num + 1];
@@ -121,17 +124,15 @@ int main(int argc, char const *argv[])
         Tell_Wait_pipe(Pro_Pipe_fd);
 
         //读打开源文件
-        printf("--Producer<%d> created successfully\n--Open source file <%s>\n", getpid(), argv[1]);
-        if((Pro_fp = fopen(argv[1],"r")) == NULL)
+        if ((Pro_fd = open(argv[1], O_RDONLY)) == -1)
             Error_Exit("Open source file error\n");
+
         
         //以写方式打开FIFO
-        printf("--Producer<%d> opening FIFO O_WRONLY\n--Waiting Customer.....\n\n", getpid());
         if ((Pro_FIFO_fd = open(FIFO_path, O_WRONLY)) == -1)
             Error_Exit("Open fifo error\n");
         
         //创建生产者子进程将源文件数据写入管道
-        printf("--Producer<%d> read from %s and start writing in fifo<%d>\n", getpid(), argv[1], Pro_FIFO_fd); 
         for(i = 1; i < Pro_child_Num + 1; i++)
         {
             if((Pro_pid[i] = fork()) < 0)
@@ -143,17 +144,17 @@ int main(int argc, char const *argv[])
                 int Pro_count;
                 long int Pro_bytes,Pro_bytes_sum;
                 char Pro_buffer[BUFFER_SIZE];
-                long int file_position,file_position2;
+                off_t file_position,file_position2;
                 
-                printf("----Producer_child[%d]<%d> created successfully\n", i, getpid());
                 Pro_bytes = 0;
                 while(1)
                 {
                     //互斥
                     Wait_pipe(Pro_Pipe_fd);
 
-                    file_position = ftell(Pro_fp);
-                    Pro_count = fread(Pro_buffer,sizeof(char),BUFFER_SIZE - 4,Pro_fp);
+                    file_position = lseek(Pro_fd,0,SEEK_CUR);
+                    if((Pro_count = read(Pro_fd, Pro_buffer, BUFFER_SIZE - 4)) == -1)
+                        Error_Exit("Read source file error\n");
                     if(Pro_count == 0)  //文件为空时 返回0
                     {
                         Tell_pipe(Pro_Pipe_fd);
@@ -161,7 +162,6 @@ int main(int argc, char const *argv[])
                     }
                     ItoC32(Pro_buffer,file_position,Pro_count,1);
                     file_position2 = CtoI32(Pro_buffer,Pro_count,1);
-                    printf("Pro_child<%d> fread %d bytes file_position = %ld \n", i, Pro_count, file_position);
 
                     if(write(Pro_FIFO_fd, Pro_buffer, Pro_count + 4) == -1)
                         Error_Exit("Write FIFO error\n");
@@ -176,17 +176,10 @@ int main(int argc, char const *argv[])
                 
                     if(Pro_count != BUFFER_SIZE - 4) //到达文件尾端，Pro_count都可能小于BUFFER_SIZE - 4
                     {
-                        if (ferror(Pro_fp))
-                            Error_Exit("fread error\n");
-                        else
-                        {
-                            file_position = ftell(Pro_fp);
-                            printf("Pro_child<%d> read file finish, file_position = %ld\n", i, file_position);
-                            break;
-                        }
+                        file_position = lseek(Pro_fd,0,SEEK_CUR);
+                        break;
                     }
                 }
-                printf("----Producer_child[%d]<%d> have written %ld bytes \n", i, getpid(), Pro_bytes);
                 exit(EXIT_SUCCESS);
             }
         }
@@ -196,7 +189,6 @@ int main(int argc, char const *argv[])
         {
             Pro_pid[0] = wait(NULL);
             Pro_End--;
-            printf("--Producer_child[%d] end\n", Pro_pid[0]);
         }
 
         fclose(Pro_fp);
@@ -230,18 +222,15 @@ int main(int argc, char const *argv[])
         Tell_Wait_pipe(Cus_Pipe_fd);
         
         //创建目标文件并写打开
-        printf("--Customer %d created successfully\n--Creat target file <%s>\n", getpid(), argv[2]);
         if((Cus_fp = fopen(argv[2],"w")) == NULL)
             Error_Exit("Creat target file error\n");
         
         //以读方式打开FIFO
-        printf("--Customer<%d> opening FIFO O_RDONLY\n--Waiting Producer.....\n\n", getpid());
         Cus_FIFO_fd = open(FIFO_path, O_RDONLY);
         if (Cus_FIFO_fd == -1)
             Error_Exit("Open fifo error\n");
         
         //创建消费者子进程将管道数据写入目标文件
-        printf("--Customer<%d> read from fifo<%d> and start writing in file<%s>\n", getpid(), Cus_FIFO_fd, argv[2]); 
         for(j = 1; j < Cus_child_Num + 1; j++)
         {
             if((Cus_pid[j] = fork()) < 0)
@@ -253,7 +242,6 @@ int main(int argc, char const *argv[])
                 long int Cus_bytes, Cus_bytes_sum;
                 char Cus_buffer[BUFFER_SIZE + 1];
                 long int file_position,file_position2;
-                printf("----Customer_child[%d]<%d> created successfully\n", j, getpid());
                 Cus_bytes = 0;
                 while(1)
                 {
@@ -274,7 +262,6 @@ int main(int argc, char const *argv[])
                     {
                         file_position = ftell(Cus_fp);
                         file_position2 = CtoI32(Cus_buffer,Cus_count,1);
-                        printf("-------------------------Cus_child<%d> read %d bytes file_position = %ld \n",j,Cus_count - 4,file_position);
                         fwrite(Cus_buffer,sizeof(char),Cus_count - 4,Cus_fp);
                         Cus_bytes_sum = CtoI32(shmptr,1,4);
                         Cus_bytes_sum += (Cus_count - 4);
@@ -289,13 +276,10 @@ int main(int argc, char const *argv[])
                         if(Cus_count  != BUFFER_SIZE)
                         {
                             file_position = ftell(Cus_fp);
-                            printf("-------------------------Cus_child<%d> read fifo finish, file_position = %ld \n\n",j,file_position);
                             break;
                         }
                     }
                 }
-                printf("----Customer_child[%d]<%d> have read %ld bytes \n", j, getpid(), Cus_bytes);
-                //Read_bytes += Cus_bytes;
                 exit(EXIT_SUCCESS);
             }
         }
@@ -305,7 +289,6 @@ int main(int argc, char const *argv[])
         {
             Cus_pid[0] = wait(NULL);
             Cus_End--;
-            printf("--Customer_child[%d] end\n", Cus_pid[0]);
         }
         fclose(Cus_fp);
         close(Cus_FIFO_fd);
@@ -317,14 +300,16 @@ int main(int argc, char const *argv[])
     {
         pid[0] = wait(NULL);
         End--;
-        printf("Process[%d] end\n", pid[0]);
     }
 
     //删除FIFO
     unlink(FIFO_path);
 
     gettimeofday(&finish,NULL);
-    printf("\nCopy complated !\ntime = %.3f s\n",(double)((finish.tv_sec-start.tv_sec) * 1000000 + (finish.tv_usec-start.tv_usec)) / 1000000);
+    Copy_data = CtoI32(shmptr,1,4) / 1024 / 1024;//MB
+    Complate_time = (double)((finish.tv_sec-start.tv_sec) * 1000000 + (finish.tv_usec-start.tv_usec)) / 1000000;
+    speed = Copy_data / Complate_time; //MB/S
+    printf("\nCopy complated !\ntime: %.3f s   speed: %.2f MB/s\n",Complate_time,speed);
     printf("Producer write %ld KB\n", CtoI32(shmptr,0,4));
     printf("Customer read %ld KB\n", CtoI32(shmptr,1,4));
 
