@@ -1,10 +1,10 @@
-//time ./Pro_Cus1.5.out /mnt/f/Linux_code/tmp/11.mp4 /mnt/f/Linux_code/tmp/22.mp4
-//time ./Pro_Cus1.5.out /mnt/f/Linux_code/tmp/tmp /mnt/f/Linux_code/tmp/tmp1
+//time ./Pro_Cus1.6.out /mnt/f/Linux_code/tmp/11.mp4 /mnt/f/Linux_code/tmp/22.mp4
+//time ./Pro_Cus1.6.out /mnt/f/Linux_code/tmp/tmp.c /mnt/f/Linux_code/tmp/tmp1.c
 //md5sum ../tmp/tmp1.c ../tmp/tmp.c
-//gdb Pro_Cus1.5.out
-//set args /mnt/f/Linux_code/tmp/tmp /mnt/f/Linux_code/tmp/tmp1
+//gdb Pro_Cus1.6.out
+//set args /mnt/f/Linux_code/tmp/tmp.c /mnt/f/Linux_code/tmp/tmp1.c
 //display /x {str[0],str[1],str[2],str[3]}
-//加入共享存储
+//加入文件偏移量 文件描述符乱跳
 #include "apue.h"
 #include <sys/time.h> 
 #include <sys/wait.h>
@@ -12,12 +12,12 @@
 #define FIFO_path "/home/mr_yy/Program/FIFO/fifo"
 #define Pro_FIFO_path "/home/mr_yy/Program/FIFO/fifo1"
 #define Cus_FIFO_path "/home/mr_yy/Program/FIFO/fifo2"
-#define BUFFER_SIZE 4096 //FIFO大小4096，流缓冲大小8192  //需设为管道大小的整数倍
+#define BUFFER_SIZE 1004 //FIFO大小4096，流缓冲大小8192  //需设为管道大小的整数倍
 #define SHM_SIZE 4096
 #define SHM_MODE 0600 //USR read and write
 //#define BUFFER_SIZE PIPE_BUF //4096
-#define Pro_child_Num 5
-#define Cus_child_Num 5
+#define Pro_child_Num 2
+#define Cus_child_Num 2
 
 
 //出错处理
@@ -50,19 +50,24 @@ void Tell_pipe(int *fd)
     if (write(fd[1],"c",1) != 1)
         Error_Exit("Write pipe error!\n\n");
 }
-long int CtoI32(unsigned char *str, int addr)
+
+//字符转整型
+long int CtoI32(unsigned char *str, int addr, int p)
 {
-    addr *= 4;
+    addr *= p;
     return (str[0 + addr] | str[1 + addr] << 8 | str[2 + addr] << 16 | str[3 + addr] << 24);
 }
-void ItoC32(unsigned char *str, long int num, int addr)
+
+//整型转字符
+void ItoC32(unsigned char *str, long int num, int addr, int p)
 {
-    addr *= 4;
+    addr *= p;
     str[0 + addr] = num;
     str[1 + addr] = num >> 8;
     str[2 + addr] = num >> 16;
     str[3 + addr] = num >> 24;
 }
+
 //主程序
 int main(int argc, char const *argv[])
 {
@@ -110,7 +115,7 @@ int main(int argc, char const *argv[])
         char Pro_chr;
 
         //共享存储区清空
-        ItoC32(shmptr,0,0);
+        ItoC32(shmptr,0,0,4);
         
         //创建无名管道
         Tell_Wait_pipe(Pro_Pipe_fd);
@@ -137,7 +142,8 @@ int main(int argc, char const *argv[])
             {
                 int Pro_count;
                 long int Pro_bytes,Pro_bytes_sum;
-                char Pro_buffer[BUFFER_SIZE + 1];
+                char Pro_buffer[BUFFER_SIZE];
+                long int file_position,file_position2;
                 
                 printf("----Producer_child[%d]<%d> created successfully\n", i, getpid());
                 Pro_bytes = 0;
@@ -145,24 +151,39 @@ int main(int argc, char const *argv[])
                 {
                     //互斥
                     Wait_pipe(Pro_Pipe_fd);
-                    Pro_count = fread(Pro_buffer,sizeof(char),BUFFER_SIZE,Pro_fp);
-                    if(write(Pro_FIFO_fd, Pro_buffer, Pro_count) == -1)
+
+                    file_position = ftell(Pro_fp);
+                    Pro_count = fread(Pro_buffer,sizeof(char),BUFFER_SIZE - 4,Pro_fp);
+                    if(Pro_count == 0)  //文件为空时 返回0
+                    {
+                        Tell_pipe(Pro_Pipe_fd);
+                        break;
+                    }
+                    ItoC32(Pro_buffer,file_position,Pro_count,1);
+                    file_position2 = CtoI32(Pro_buffer,Pro_count,1);
+                    printf("Pro_child<%d> fread %d bytes file_position = %ld \n", i, Pro_count, file_position);
+
+                    if(write(Pro_FIFO_fd, Pro_buffer, Pro_count + 4) == -1)
                         Error_Exit("Write FIFO error\n");
 
-                    Pro_bytes_sum = CtoI32(shmptr,0); //从共享区0取数据
+                    Pro_bytes_sum = CtoI32(shmptr,0,4); //从共享区0取数据
                     Pro_bytes_sum += Pro_count;
-                    ItoC32(shmptr,Pro_bytes_sum,0);//写入共享区0
+                    ItoC32(shmptr,Pro_bytes_sum,0,4);//写入共享区0
                     
                     Tell_pipe(Pro_Pipe_fd);
                     //互斥
                     Pro_bytes += Pro_count;
                 
-                    if(Pro_count != BUFFER_SIZE)
+                    if(Pro_count != BUFFER_SIZE - 4) //到达文件尾端，Pro_count都可能小于BUFFER_SIZE - 4
                     {
                         if (ferror(Pro_fp))
                             Error_Exit("fread error\n");
                         else
-                            break;  
+                        {
+                            file_position = ftell(Pro_fp);
+                            printf("Pro_child<%d> read file finish, file_position = %ld\n", i, file_position);
+                            break;
+                        }
                     }
                 }
                 printf("----Producer_child[%d]<%d> have written %ld bytes \n", i, getpid(), Pro_bytes);
@@ -203,7 +224,7 @@ int main(int argc, char const *argv[])
         char Cus_chr;
 
         //共享存储区清空
-        ItoC32(shmptr,0,1);
+        ItoC32(shmptr,0,1,4);
 
         //创建无名管道
         Tell_Wait_pipe(Cus_Pipe_fd);
@@ -231,6 +252,7 @@ int main(int argc, char const *argv[])
                 int Cus_count;
                 long int Cus_bytes, Cus_bytes_sum;
                 char Cus_buffer[BUFFER_SIZE + 1];
+                long int file_position,file_position2;
                 printf("----Customer_child[%d]<%d> created successfully\n", j, getpid());
                 Cus_bytes = 0;
                 while(1)
@@ -239,20 +261,38 @@ int main(int argc, char const *argv[])
                     Wait_pipe(Cus_Pipe_fd);
                     if((Cus_count = read(Cus_FIFO_fd, Cus_buffer, BUFFER_SIZE)) == -1)
                         Error_Exit("Read FIFO error\n");
-                    fwrite(Cus_buffer,sizeof(char),Cus_count,Cus_fp);
-
-                    Cus_bytes_sum = CtoI32(shmptr,1);
-                    Cus_bytes_sum += Cus_count;
-                    ItoC32(shmptr,Cus_bytes_sum,1);
-                    //必须冲洗缓冲区，不然多进程读会出现在缓冲区数据的次序不一致
-                    if(fflush(Cus_fp) != 0)
-                        Error_Exit("fflush error\n");
-
-                    Tell_pipe(Cus_Pipe_fd);
-                    //互斥
-                    Cus_bytes += Cus_count;
                     if(Cus_count == 0)
-                        break;   
+                    {
+                        if(errno != EAGAIN)
+                        {
+                            Tell_pipe(Cus_Pipe_fd);
+                            break;
+                        }
+                        Tell_pipe(Cus_Pipe_fd);
+                    }
+                    else
+                    {
+                        file_position = ftell(Cus_fp);
+                        file_position2 = CtoI32(Cus_buffer,Cus_count,1);
+                        printf("-------------------------Cus_child<%d> read %d bytes file_position = %ld \n",j,Cus_count - 4,file_position);
+                        fwrite(Cus_buffer,sizeof(char),Cus_count - 4,Cus_fp);
+                        Cus_bytes_sum = CtoI32(shmptr,1,4);
+                        Cus_bytes_sum += (Cus_count - 4);
+                        ItoC32(shmptr,Cus_bytes_sum,1,4);
+                        //必须冲洗缓冲区，不然多进程读会出现在缓冲区数据的次序不一致
+                        if(fflush(Cus_fp) != 0)
+                            Error_Exit("fflush error\n");
+
+                        Tell_pipe(Cus_Pipe_fd);
+                        //互斥
+                        Cus_bytes += (Cus_count - 4);
+                        if(Cus_count  != BUFFER_SIZE)
+                        {
+                            file_position = ftell(Cus_fp);
+                            printf("-------------------------Cus_child<%d> read fifo finish, file_position = %ld \n\n",j,file_position);
+                            break;
+                        }
+                    }
                 }
                 printf("----Customer_child[%d]<%d> have read %ld bytes \n", j, getpid(), Cus_bytes);
                 //Read_bytes += Cus_bytes;
@@ -285,8 +325,8 @@ int main(int argc, char const *argv[])
 
     gettimeofday(&finish,NULL);
     printf("\nCopy complated !\ntime = %.3f s\n",(double)((finish.tv_sec-start.tv_sec) * 1000000 + (finish.tv_usec-start.tv_usec)) / 1000000);
-    printf("Producer write %ld KB\n", CtoI32(shmptr,0) / 1024);
-    printf("Customer read %ld KB\n", CtoI32(shmptr,1) / 1024);
+    printf("Producer write %ld KB\n", CtoI32(shmptr,0,4));
+    printf("Customer read %ld KB\n", CtoI32(shmptr,1,4));
 
     //md5计算
     if((MD5_pid = fork()) < 0)
