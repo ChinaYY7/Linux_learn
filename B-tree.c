@@ -216,6 +216,7 @@ void Merge(PtrBT T, PtrBTNode ParentNode, int LeftIndex, int RightIndex)
     //若父节点是根节点，且合并后根节点为空，需要重新设定根节点
     if(ParentNode == T->Root && 0 == ParentNode->Num)
         T->Root = LeftNode;
+    free(RightNode);
 }
 
 //删除节点
@@ -437,8 +438,9 @@ void BTtraversal_level(PtrBTNode Root)
             if(tmp ->Child[i]->IsLeaf != True)
                 EnQueue(&BTNode_Queue,tmp ->Child[i]);
         }
+        printf("\n");
     }
-    printf("\n");
+    printf("\n\n");
 }
 //创建树
 //入口参数：T树的根目录
@@ -449,53 +451,59 @@ void BTCreateTree(PtrBT T)
 
     for(i = 0; i < 23; i++)
     {
+        //printf("Insert %d\n",a[i]);
         BTInsert(T, a[i]);
-        BTtraversal_level(T -> Root);
-        printf("The End\n\n");
+        //BTtraversal_level(T -> Root);
     }
-    
-    
 }
 
 int main(void)
 {
+    int Cmd,Insert_val,Delete_val;
     PtrBT T = (PtrBT)malloc(sizeof(struct Tree));
 
     T->Root = BTAllocateNode();
 
     BTCreateTree(T);
-    //BTtraversal_level(T -> Root);
 
-    /*
+    while(1)
+    {
+        printf("1.Insert\n");
+        printf("2.Delete\n");
+        printf("3.Traversal B-tree\n");
+        printf("4.Exit\n");
+        printf("5.Clear\n");
+        printf("Input Cmd: ");
+        scanf("%d",&Cmd);
 
-    printf("B_Tree after delete 16:\n");
-    BTDelete(T, T->Root, 16);
-    BTPrintTree(T->Root);
-
-    printf("B_Tree after delete 18:\n");
-    BTDelete(T, T->Root, 18);
-    BTPrintTree(T->Root);
-
-    printf("B_Tree after delete 20:\n");
-    BTDelete(T, T->Root, 20);
-    BTPrintTree(T->Root);
-
-    printf("B_Tree after delete 19:\n");
-    BTDelete(T, T->Root, 19);
-    BTPrintTree(T->Root);
-
-    printf("B_Tree after delete 0:\n");
-    BTDelete(T, T->Root, 0);
-    BTPrintTree(T->Root);
-
-    printf("B_Tree after delete 5:\n");
-    BTDelete(T, T->Root, 5);
-    BTPrintTree(T->Root);
-
-    printf("B_Tree after delete 2:\n");
-    BTDelete(T, T->Root, 2);
-    BTPrintTree(T->Root);
-    */
-
-    return 0;
+        switch(Cmd)
+        {
+            case 1:
+                system("clear");
+                printf("Input insert val: ");
+                scanf("%d",&Insert_val);
+                BTInsert(T, Insert_val);
+                printf("Insert_result:\n");
+                BTtraversal_level(T -> Root);
+                break;
+            case 2:
+                system("clear");
+                printf("Input delete val: ");
+                scanf("%d",&Delete_val);
+                BTDelete(T, T->Root, Delete_val);
+                printf("Delete_result:\n");
+                BTtraversal_level(T -> Root);
+                break;
+            case 3:
+                system("clear");
+                printf("Traversal B-tree:\n");
+                BTtraversal_level(T -> Root);
+                break;
+            case 4:
+                return 0;
+            case 5:
+                system("clear");
+                break;
+        }
+    }
 }
