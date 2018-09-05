@@ -351,6 +351,95 @@ void BTPrintTree(PtrBTNode Root)
         BTPrintTree(Root->Child[i]);
 }
 
+//队列结构体
+#define queuesize 100
+typedef struct queue
+{
+	int head, tail; 
+	PtrBTNode *Queue_BTNode;          
+}Queue;
+
+//初始化队列
+void InitQueue(Queue *q)
+{
+	q->Queue_BTNode = (PtrBTNode*)malloc(sizeof(PtrBTNode) * queuesize);
+	q->tail = 0;
+	q->head = 0;
+}
+
+//入队
+void EnQueue(Queue *q, PtrBTNode BTNode)
+{
+	int tail = (q->tail + 1) % queuesize; 
+	if (tail == q->head)                   
+	{
+		printf("the queue has been filled full!");
+	}
+	else
+	{
+        q->Queue_BTNode[q->tail] = BTNode;
+		q->tail = tail;
+	}
+}
+
+//出队
+PtrBTNode DeQueue(Queue *q)
+{
+	PtrBTNode tmp;
+	if (q->tail == q->head)     
+	{
+		printf("the queue is NULL\n");
+	}
+	else
+	{
+		tmp = q->Queue_BTNode[q->head];
+		q->head = (q->head + 1) % queuesize;
+	}
+	return tmp;
+}
+
+//层序遍历
+void BTtraversal_level(PtrBTNode Root)
+{
+    Queue BTNode_Queue;
+    PtrBTNode tmp;
+    int i,j;
+
+    if(NULL == Root)
+        return;
+    InitQueue(&BTNode_Queue);
+
+    printf("[");
+    for(j = 0; j < Root -> Num; j++)
+    {
+        printf("%d", Root -> Key[j]);
+        if(j != Root->Num - 1)
+        printf(" ");
+    }
+    printf("]%d ",Root->IsLeaf);
+    if(Root->IsLeaf != True)
+        EnQueue(&BTNode_Queue,Root);
+    
+    
+    while(BTNode_Queue.head != BTNode_Queue.tail)
+    {
+        tmp = DeQueue(&BTNode_Queue);
+        for(i = 0; i <= tmp->Num; i++)
+        {
+            printf("[");
+            for(j = 0; j < tmp -> Child[i]->Num; j++)
+            {
+                printf("%d", tmp ->Child[i]->Key[j]);
+                if(j != tmp->Child[i]->Num - 1)
+                    printf(" ");
+            }
+            printf("]%d ",tmp ->Child[i]->IsLeaf);
+            if(tmp ->Child[i]->IsLeaf != True)
+                EnQueue(&BTNode_Queue,tmp ->Child[i]);
+        }
+    }
+    printf("\n");
+}
 //创建树
 //入口参数：T树的根目录
 void BTCreateTree(PtrBT T)
@@ -361,9 +450,11 @@ void BTCreateTree(PtrBT T)
     for(i = 0; i < 23; i++)
     {
         BTInsert(T, a[i]);
-        BTPrintTree(T->Root);
+        BTtraversal_level(T -> Root);
         printf("The End\n\n");
     }
+    
+    
 }
 
 int main(void)
@@ -373,6 +464,9 @@ int main(void)
     T->Root = BTAllocateNode();
 
     BTCreateTree(T);
+    //BTtraversal_level(T -> Root);
+
+    /*
 
     printf("B_Tree after delete 16:\n");
     BTDelete(T, T->Root, 16);
@@ -401,6 +495,7 @@ int main(void)
     printf("B_Tree after delete 2:\n");
     BTDelete(T, T->Root, 2);
     BTPrintTree(T->Root);
+    */
 
     return 0;
 }
