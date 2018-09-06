@@ -14,8 +14,10 @@ struct TreeNode{
     Bool IsLeaf;
     int* Key;
     PtrBTNode *Child;
+    PtrBTNode next;
+    PtrBTNode prior;
+    int date;
 };
-
 struct Tree{
     PtrBTNode Root;
 };
@@ -37,6 +39,8 @@ PtrBTNode BTAllocateNode(void)
 
     for(i = 0; i < MinDegree * 2; i++)
         NewNode->Child[i] = NULL;
+    NewNode->prior = NULL;
+    NewNode->next = NULL;
     
     return NewNode;
 }
@@ -114,6 +118,14 @@ void BTChildSplit(PtrBTNode SplitNodeP, int ChildIndex)
             NewNode->Key[i] = FullNode->Key[MinDegree - 1 + i];
         NewNode->Num = MinDegree;
         FullNode->Num = MinDegree - 1;
+        
+        NewNode->next = FullNode->next;
+        if(FullNode->next != NULL)
+            FullNode->next->prior = NewNode;
+        FullNode->next = NewNode;
+        NewNode->prior = FullNode;
+        
+
     }
     else
     {
@@ -455,6 +467,32 @@ void BTtraversal_level(PtrBTNode Root)
     printf("\n\n");
     DeleteQueue(&BTNode_Queue);
 }
+
+//叶节点链表遍历
+void BTtraversal_leaf(PtrBTNode head)
+{
+    PtrBTNode Ptree;
+    int i;
+    Ptree = head->next;
+    
+    while(Ptree != NULL)
+    {
+        
+        putchar('[');
+        
+        for(i = 0; i < Ptree->Num; i++)
+        {
+            printf("%d", Ptree->Key[i]);
+            if(i != Ptree->Num - 1)
+                putchar(' ');
+        }
+        putchar(']');
+        printf("%d ", Ptree->IsLeaf);
+        Ptree = Ptree->next;
+    }
+    printf("\n");
+}
+
 //创建树
 //入口参数：T树的根目录
 void BTCreateTree(PtrBT T)
@@ -474,8 +512,13 @@ int main(void)
 {
     int Cmd,Insert_val,Delete_val;
     PtrBT T = (PtrBT)malloc(sizeof(struct Tree));
-
+    PtrBTNode head;
+    head = BTAllocateNode();
     T->Root = BTAllocateNode();
+    
+    head->next = T->Root;
+    T->Root->prior = head->next;
+    T->Root->next = NULL;
 
     BTCreateTree(T);
 
@@ -484,39 +527,44 @@ int main(void)
         printf("1.Insert\n");
         printf("2.Delete\n");
         printf("3.Traversal B-tree\n");
-        printf("4.Exit\n");
+        printf("4.Traversal leaf\n");
         printf("5.Clear\n");
+        printf("6.Exit\n");
         printf("Input Cmd: ");
         scanf("%d",&Cmd);
 
         switch(Cmd)
         {
             case 1:
-                system("clear");
-                printf("Input insert val: ");
+                //system("clear");
+                printf("\nInput insert val: ");
                 scanf("%d",&Insert_val);
                 BTInsert(T, Insert_val);
                 printf("Insert_result:\n");
                 BTtraversal_level(T -> Root);
                 break;
             case 2:
-                system("clear");
-                printf("Input delete val: ");
+                //system("clear");
+                printf("\nInput delete val: ");
                 scanf("%d",&Delete_val);
                 BTDelete(T, T->Root, Delete_val);
                 printf("Delete_result:\n");
                 BTtraversal_level(T -> Root);
                 break;
             case 3:
-                system("clear");
-                printf("Traversal B-tree:\n");
+                //system("clear");
+                printf("\nTraversal B-tree:\n");
                 BTtraversal_level(T -> Root);
                 break;
             case 4:
-                return 0;
+                printf("\nTraversal leaf:\n");
+                BTtraversal_leaf(head);
+                break;
             case 5:
                 system("clear");
                 break;
+            case 6:
+                return 0;
         }
     }
 }
