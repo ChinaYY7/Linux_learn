@@ -19,7 +19,7 @@ struct TreeNode{
 struct Tree{
     PtrBTNode Root;
 };
-typedef struct Tree *PtrBT;
+typedef struct Tree *PtrBT;  //用于修改根节点时
 
 //为节点分配内存
 //返回值：为节点分配的内存的地址
@@ -108,16 +108,24 @@ void BTChildSplit(PtrBTNode SplitNodeP, int ChildIndex)
     PtrBTNode NewNode = BTAllocateNode(); 
     PtrBTNode FullNode = SplitNodeP->Child[ChildIndex];
 
-    for(i = 0; i < MinDegree - 1; i++)
-        NewNode->Key[i] = FullNode->Key[MinDegree + i];
-
-    if(False == FullNode->IsLeaf)
+    if(True == FullNode->IsLeaf)
     {
+        for(i = 0; i < MinDegree; i++)
+            NewNode->Key[i] = FullNode->Key[MinDegree - 1 + i];
+        NewNode->Num = MinDegree;
+        FullNode->Num = MinDegree - 1;
+    }
+    else
+    {
+        for(i = 0; i < MinDegree - 1; i++)
+            NewNode->Key[i] = FullNode->Key[MinDegree + i];
+
         NewNode->IsLeaf = False;
         for(i = 0; i < MinDegree; i++)
             NewNode->Child[i] = FullNode->Child[MinDegree + i];
+        NewNode->Num = FullNode->Num = MinDegree - 1;
     }
-    NewNode->Num = FullNode->Num = MinDegree - 1;
+    
 
     //将被分裂节点中的中间节点插入被分裂节点的父节点中
     ShiftKey(SplitNodeP->Key, R, ChildIndex, SplitNodeP->Num - 1);
@@ -367,6 +375,10 @@ void InitQueue(Queue *q)
 	q->tail = 0;
 	q->head = 0;
 }
+void DeleteQueue(Queue *q)
+{
+    free(q -> Queue_BTNode);
+}
 
 //入队
 void EnQueue(Queue *q, PtrBTNode BTNode)
@@ -441,6 +453,7 @@ void BTtraversal_level(PtrBTNode Root)
         printf("\n");
     }
     printf("\n\n");
+    DeleteQueue(&BTNode_Queue);
 }
 //创建树
 //入口参数：T树的根目录
