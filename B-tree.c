@@ -1,6 +1,8 @@
 #include "apue.h"
 #define R 1
 #define L 0
+#define Success 1
+#define Fail 0
 #define MinDegree 3
 typedef enum BoolType Bool;
 enum BoolType{
@@ -16,7 +18,7 @@ struct TreeNode{
     PtrBTNode *Child;
     PtrBTNode next;
     PtrBTNode prior;
-    int date;
+    int* date;
 };
 struct Tree{
     PtrBTNode Root;
@@ -156,7 +158,7 @@ int GetIndex(int* Key, int Size, int Val)
 {
     int i;
 
-    for(i = 0; i < Size && Val > Key[i]; i++);
+    for(i = 0; i < Size && Val >= Key[i]; i++);
 
     return i;
 
@@ -215,19 +217,28 @@ void Merge(PtrBT T, PtrBTNode ParentNode, int LeftIndex, int RightIndex)
 
     PtrBTNode LeftNode = ParentNode->Child[LeftIndex], RightNode = ParentNode->Child[RightIndex];
 
-    for(i = 0; i < MinDegree - 1; i++)
-        LeftNode->Key[MinDegree + i] = RightNode->Key[i];
-
-    if(False == LeftNode->IsLeaf)//不是叶节点还需要合并子节点指针数组
+    if(True == LeftNode->IsLeaf)
     {
-        for(i = 0; i < MinDegree; i++)
-            LeftNode->Child[MinDegree + i] = RightNode->Child[i];
+        for(i = 0; i < MinDegree - 1; i++)
+            LeftNode->Key[MinDegree - 1 + i] = RightNode->Key[i];
+        LeftNode->Num = MinDegree * 2 - 2;
+        
+        if(LeftNode->next->next != NULL)
+            LeftNode->next->next->prior = LeftNode;
+        LeftNode->next = LeftNode->next->next;
     }
 
-    //取需合并的两个节点所夹的父节点中的关键字，放入合并后的节点中当作中间值
-    LeftNode->Key[MinDegree - 1] = ParentNode->Key[LeftIndex];
-    LeftNode->Num = MinDegree * 2 - 1;
+    else
+    {
+        for(i = 0; i < MinDegree - 1; i++)
+            LeftNode->Key[MinDegree + i] = RightNode->Key[i];
+        for(i = 0; i < MinDegree; i++)
+            LeftNode->Child[MinDegree + i] = RightNode->Child[i];
 
+        //取需合并的两个节点所夹的父节点中的关键字，放入合并后的节点中当作中间值
+        LeftNode->Key[MinDegree - 1] = ParentNode->Key[LeftIndex];
+        LeftNode->Num = MinDegree * 2 - 1;
+    }
     //删除父节点中被取走的关键字和子节点指针
     ShiftKey(ParentNode->Key, L, LeftIndex + 1, ParentNode->Num - 1);
     ShiftChild(ParentNode->Child, L, RightIndex + 1, ParentNode->Num);
@@ -241,81 +252,70 @@ void Merge(PtrBT T, PtrBTNode ParentNode, int LeftIndex, int RightIndex)
 
 //删除节点
 //入口参数：T根节点，CurrentNode当前查找的节点，val需要删除的关键字
-void BTDelete(PtrBT T, PtrBTNode CurrentNode, int Val)
+int BTDelete(PtrBT T, PtrBTNode CurrentNode, int Val)
 {
     int Index;
     PtrBTNode Precursor, Successor, SubNode;
 
     Index = GetIndex(CurrentNode->Key, CurrentNode->Num, Val);
 
-    if(Index < CurrentNode->Num && CurrentNode->Key[Index] == Val) //当前节点找到需要删除的关键字
+    if(True == CurrentNode->IsLeaf) //是叶节点
     {
-        if(True == CurrentNode->IsLeaf) //是叶节点，直接删除
+        if(CurrentNode->Key[Index - 1] == Val) //在叶节点中找到val，直接删除
         {
-            ShiftKey(CurrentNode->Key, L, Index + 1, CurrentNode->Num - 1);
+            ShiftKey(CurrentNode->Key, L, Index, CurrentNode->Num - 1);
             (CurrentNode->Num)--;
-            return;
+            return Success;
         }
-        else  //不是叶节点
-        {
-            Precursor = CurrentNode->Child[Index];
-            Successor = CurrentNode->Child[Index + 1];
-
-            if(Precursor->Num > MinDegree - 1) //若该关键字的前继节点中关键字关键字数量大于最低值，就从前继节点中取最大值覆盖该关键字，然后继续递归删除前继节点中的最大值
-            {
-                CurrentNode->Key[Index] = Precursor->Key[Precursor->Num - 1];
-                BTDelete(T, Precursor, Precursor->Key[Precursor->Num - 1]);
-            }
-
-            else if(Successor->Num > MinDegree - 1)//若该关键字的后继节点中关键字关键字数量大于最低值，就从后继节点中取最小值覆盖该关键字，然后继续递归删除后继节点中的最小值
-            {
-
-                CurrentNode->Key[Index] = Successor->Key[0];
-                BTDelete(T, Successor, Successor->Key[0]);
-            }
-            else//若该关键字的前继后继节点关键字数量均不大于最低值，需先进行前继和后继的合并，然后再进行递归删除
-            {
-
-                Merge(T, CurrentNode, Index, Index + 1);
-                BTDelete(T, CurrentNode->Child[Index], Val);//合并后需要删除的节点就在合并的节点中
-            }
-
-        }
-
+        else
+            return Fail;
     }
-    else//当前节点未找到需要删除的关键字
+    else//不是叶节点
     { 
 
-        if(True == CurrentNode->IsLeaf) //是叶节点，该树中没有需要删除的关键字
-            return;
-        else
+        SubNode = CurrentNode->Child[Index];
+        if(SubNode->Num > MinDegree - 1) //下一个用于查找需要删除的关键字的节点中关键字数量大于最小值，继续在该节点进行递归删除
+            BTDelete(T, SubNode, Val);
+        else//下一个用于查找需要删除的关键字的节点中关键字数量小于等于最小值
         {
-            SubNode = CurrentNode->Child[Index];
-            if(SubNode->Num > MinDegree - 1) //下一个用于查找需要删除的关键字的节点中关键字数量大于最小值，继续在该节点进行递归删除
-                BTDelete(T, SubNode, Val);
-            else//下一个用于查找需要删除的关键字的节点中关键字数量小于等于最小值
+            //当下一个进行查找的节点有可能没有左兄弟节点（前继）或右兄弟节点（后继），因此需要进行判断
+            if(Index > 0)
+                Precursor = CurrentNode->Child[Index - 1];
+            if(Index < CurrentNode->Num)
+                Successor = CurrentNode->Child[Index + 1];
+            if(Index > 0 && Precursor->Num > MinDegree - 1) //如果左兄弟节点中关键字数量大于最低值，可以进行向右旋转
             {
-                //当下一个进行查找的节点有可能没有左兄弟节点（前继）或右兄弟节点（后继），因此需要进行判断
-                if(Index > 0)
-                    Precursor = CurrentNode->Child[Index - 1];
-                if(Index < CurrentNode->Num)
-                    Successor = CurrentNode->Child[Index + 1];
+                ShiftKey(SubNode->Key, R, 0, SubNode->Num - 1);
+                ShiftChild(SubNode->Child, R, 0, SubNode->Num);
 
-                if(Index > 0 && Precursor->Num > MinDegree - 1) //如果左兄弟节点中关键字数量大于最低值，可以进行向右旋转
+                if(True == SubNode->IsLeaf)
                 {
-
-                    ShiftKey(SubNode->Key, R, 0, SubNode->Num - 1);
-                    ShiftChild(SubNode->Child, R, 0, SubNode->Num);
-
+                    SubNode->Key[0] = Precursor->Key[Precursor->Num - 1];
+                    CurrentNode->Key[Index - 1] = Precursor->Key[Precursor->Num - 1];
+                    (SubNode->Num)++;
+                    (Precursor->Num)--;
+                }
+                else
+                {
                     SubNode->Key[0] = CurrentNode->Key[Index - 1];
                     SubNode->Child[0] = Precursor->Child[Precursor->Num];
                     CurrentNode->Key[Index - 1] = Precursor->Key[Precursor->Num - 1];
                     (SubNode->Num)++;
                     (Precursor->Num)--;
-                    
-                    BTDelete(T, SubNode, Val);
                 }
-                else if(Index < CurrentNode->Num && Successor->Num > MinDegree - 1)//如果右兄弟节点中关键字数量大于最低值，可以进行向左旋转
+                BTDelete(T, SubNode, Val);
+            }
+            else if(Index < CurrentNode->Num && Successor->Num > MinDegree - 1)//如果右兄弟节点中关键字数量大于最低值，可以进行向左旋转
+            {
+                if(True == SubNode->IsLeaf)
+                {
+                    SubNode->Key[SubNode->Num] = CurrentNode->Key[Index];
+                    (SubNode->Num)++;
+                    CurrentNode->Key[Index] = Successor->Key[1];
+                    ShiftKey(Successor->Key, L, 1, Successor->Num - 1);
+                    (Successor->Num)--;
+                }
+                else
                 {
                     SubNode->Key[SubNode->Num] = CurrentNode->Key[Index];
                     SubNode->Child[SubNode->Num + 1] = Successor->Child[0];
@@ -325,28 +325,27 @@ void BTDelete(PtrBT T, PtrBTNode CurrentNode, int Val)
                     ShiftKey(Successor->Key, L, 1, Successor->Num - 1);
                     ShiftChild(Successor->Child, L, 1, Successor->Num);
                     (Successor->Num)--;
-
-                    BTDelete(T, CurrentNode->Child[Index], Val);
                 }
-                else  //如果左右兄弟节点中关键字数量都不大于最低值，需要进行合并
-                {
-                    if(Index > 0) //有左兄弟，首先与左兄弟合并，没有再和右兄弟合并
-                    {
-                        Merge(T, CurrentNode, Index - 1, Index);
-                        BTDelete(T, Precursor, Val);
-
-                    }
-                    else
-                    {
-                        Merge(T, CurrentNode, Index, Index + 1);
-                        BTDelete(T, SubNode, Val);
-                    }
-                }
-
+                BTDelete(T, CurrentNode->Child[Index], Val);
             }
+            else  //如果左右兄弟节点中关键字数量都不大于最低值，需要进行合并
+            {
+                if(Index > 0) //有左兄弟，首先与左兄弟合并，没有再和右兄弟合并
+                {
+                    Merge(T, CurrentNode, Index - 1, Index);
+                    BTDelete(T, Precursor, Val);
 
+                }
+                else
+                {
+                    Merge(T, CurrentNode, Index, Index + 1);
+                    BTDelete(T, SubNode, Val);
+                }
+            }
         }
+        //return Fail;
     }
+
 }
 
 //遍历输出树
@@ -510,7 +509,7 @@ void BTCreateTree(PtrBT T)
 
 int main(void)
 {
-    int Cmd,Insert_val,Delete_val;
+    int Cmd,Insert_val,Delete_val,Btree_Delete_stat;
     PtrBT T = (PtrBT)malloc(sizeof(struct Tree));
     PtrBTNode head;
     head = BTAllocateNode();
@@ -532,39 +531,52 @@ int main(void)
         printf("6.Exit\n");
         printf("Input Cmd: ");
         scanf("%d",&Cmd);
-
-        switch(Cmd)
+        if(Cmd  == 1 || Cmd  == 2 || Cmd  == 3 || Cmd  == 4 || Cmd  == 5 || Cmd  == 6)
         {
-            case 1:
-                //system("clear");
-                printf("\nInput insert val: ");
-                scanf("%d",&Insert_val);
-                BTInsert(T, Insert_val);
-                printf("Insert_result:\n");
-                BTtraversal_level(T -> Root);
-                break;
-            case 2:
-                //system("clear");
-                printf("\nInput delete val: ");
-                scanf("%d",&Delete_val);
-                BTDelete(T, T->Root, Delete_val);
-                printf("Delete_result:\n");
-                BTtraversal_level(T -> Root);
-                break;
-            case 3:
-                //system("clear");
-                printf("\nTraversal B-tree:\n");
-                BTtraversal_level(T -> Root);
-                break;
-            case 4:
-                printf("\nTraversal leaf:\n");
-                BTtraversal_leaf(head);
-                break;
-            case 5:
-                system("clear");
-                break;
-            case 6:
-                return 0;
+            switch(Cmd)
+            {
+                case 1:
+                    //system("clear");
+                    printf("\nInput insert val: ");
+                    scanf("%d",&Insert_val);
+                    BTInsert(T, Insert_val);
+                    printf("Insert_result:\n");
+                    BTtraversal_level(T -> Root);
+                    break;
+                case 2:
+                    //system("clear");
+                    printf("\nInput delete val: ");
+                    scanf("%d",&Delete_val);
+                    printf("Origin:\n");
+                    BTtraversal_level(T -> Root);
+                    BTtraversal_leaf(head);
+                    Btree_Delete_stat = BTDelete(T, T->Root, Delete_val);
+                    if(Success == Btree_Delete_stat)
+                    {
+                        printf("Delete_result:\n");
+                        BTtraversal_level(T -> Root);
+                        BTtraversal_leaf(head);
+                    }
+                    else
+                        printf("Not found val:%d\n",Delete_val);
+                    break;
+                case 3:
+                    //system("clear");
+                    printf("\nTraversal B-tree:\n");
+                    BTtraversal_level(T -> Root);
+                    break;
+                case 4:
+                    printf("\nTraversal leaf:\n");
+                    BTtraversal_leaf(head);
+                    break;
+                case 5:
+                    system("clear");
+                    break;
+                case 6:
+                    return 0;
+            }
         }
+        else
+            printf("Cmd is wrong,please input again !\n");
     }
 }
