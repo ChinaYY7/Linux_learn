@@ -1,9 +1,12 @@
 #include "apue.h"
+#include <time.h>
+#include <sys/time.h> 
 #define R 1
 #define L 0
 #define Success 1
 #define Fail 0
 #define MinDegree 3
+#define BT_File_path "/mnt/f/Linux_code/tmp/BT_File.txt"
 typedef enum BoolType Bool;
 enum BoolType{
     False = 0,
@@ -192,7 +195,8 @@ void BTInsertNonFull(PtrBTNode CurrentNode, int Val)
 
 //插入节点
 //入口参数：T根节点，Val插入的关键字
-void BTInsert(PtrBT T, int Val){
+void BTInsert(PtrBT T, int Val)
+{
 
     PtrBTNode NewNode;
 
@@ -492,6 +496,17 @@ void BTtraversal_leaf(PtrBTNode head)
     printf("\n");
 }
 
+//清空树
+void Clear_tree(PtrBT T, PtrBTNode head)
+{
+    PtrBTNode Ptree;
+    int i;
+    Ptree = head->next;
+    while(Ptree->Num != 0)
+    {
+        BTDelete(T, T->Root, Ptree->Key[0]);
+    }
+}
 //创建树
 //入口参数：T树的根目录
 void BTCreateTree(PtrBT T)
@@ -507,9 +522,127 @@ void BTCreateTree(PtrBT T)
     }
 }
 
+//出错处理
+void Error_Exit(const char *str)
+{
+    perror(str);
+    exit(EXIT_FAILURE);
+}
+//写入节点结构体
+typedef struct Node_simple
+{
+	int key[MinDegree * 2 - 1];
+    int Num;
+    Bool IsLeaf;         
+}Write_Node, Read_Node;
+
+//写入节点
+void Write_BTNode(FILE *BT_File_fp, PtrBTNode BTNode)
+{
+    Write_Node Node;
+    char i;
+    for (i = 0; i < BTNode->Num; i++)
+        Node.key[i] = BTNode->Key[i];
+    Node.Num = BTNode->Num;
+    Node.IsLeaf = BTNode->IsLeaf;
+    //printf("Node.Num = %d, Node.IsLeaf = %d\n", Node.Num,Node.IsLeaf);
+    fwrite(&Node,sizeof(struct Node_simple),1,BT_File_fp);
+}
+
+//写入树
+void Write_BTree(FILE *BT_File_fp, PtrBTNode Root)
+{
+    Queue BTNode_Queue;
+    PtrBTNode tmp;
+    int i;
+
+    if(NULL == Root)
+        return;
+    InitQueue(&BTNode_Queue);
+    Write_BTNode(BT_File_fp,Root);
+    if(Root->IsLeaf != True)
+        EnQueue(&BTNode_Queue,Root);
+
+    while(BTNode_Queue.head != BTNode_Queue.tail)
+    {
+        tmp = DeQueue(&BTNode_Queue);
+        for(i = 0; i <= tmp->Num; i++)
+        {
+            Write_BTNode(BT_File_fp,tmp->Child[i]);
+            if(tmp ->Child[i]->IsLeaf != True)
+                EnQueue(&BTNode_Queue,tmp ->Child[i]);
+        }
+    }
+    DeleteQueue(&BTNode_Queue);
+}
+
+//读入节点
+void Read_BTNode(FILE *BT_File_fp, PtrBTNode BTNode)
+{
+    int i;
+    Read_Node Node;
+    fread(&Node,sizeof(struct Node_simple),1,BT_File_fp);
+    
+    BTNode->Num = Node.Num;
+    BTNode->IsLeaf = Node.IsLeaf;
+    //printf("%d %d \n",BTNode->Num,BTNode->IsLeaf);
+    for(i = 0; i < BTNode->Num; i++)
+        BTNode->Key[i] = Node.key[i];
+}
+
+//读入树
+void Read_BTree(FILE *BT_File_fp, PtrBTNode Root, PtrBTNode *head)
+{
+    Queue BTNode_Queue;
+    PtrBTNode tmp,NewNode,Node_p;
+    int First_Lnode = 1;
+    int i;
+
+    if(NULL == Root)
+        return;
+    InitQueue(&BTNode_Queue);
+    Read_BTNode(BT_File_fp,Root);
+    if(Root->IsLeaf != True)
+        EnQueue(&BTNode_Queue,Root);
+    while(BTNode_Queue.head != BTNode_Queue.tail)
+    {
+        tmp = DeQueue(&BTNode_Queue);
+        for(i = 0; i <= tmp -> Num; i++)
+        {
+            NewNode = BTAllocateNode();
+            Read_BTNode(BT_File_fp,NewNode);
+            if(NewNode->IsLeaf != 1)
+                EnQueue(&BTNode_Queue,NewNode);
+            else
+            {
+                if(First_Lnode)
+                {
+                    First_Lnode = 0;
+                    (*head)->next = NewNode;
+                    NewNode->prior = *head;
+                    Node_p = NewNode;
+                }
+                Node_p->next = NewNode;
+                NewNode->prior = Node_p;
+                Node_p = NewNode;
+            }
+            tmp->Child[i] = NewNode;
+        }
+        NewNode->next = NULL;
+    }
+    DeleteQueue(&BTNode_Queue);
+}
+
+
 int main(void)
 {
     int Cmd,Insert_val,Delete_val,Btree_Delete_stat;
+    int Insert_num;
+    int i;
+    double Complate_time;
+    struct timeval start,finish;
+    FILE *BT_File_fp;
+
     PtrBT T = (PtrBT)malloc(sizeof(struct Tree));
     PtrBTNode head;
     head = BTAllocateNode();
@@ -519,60 +652,97 @@ int main(void)
     T->Root->prior = head->next;
     T->Root->next = NULL;
 
-    BTCreateTree(T);
+    //BTCreateTree(T);
 
     while(1)
     {
-        printf("1.Insert\n");
-        printf("2.Delete\n");
-        printf("3.Traversal B-tree\n");
-        printf("4.Traversal leaf\n");
-        printf("5.Clear\n");
-        printf("6.Exit\n");
+        printf("\n/***********************Menu*******************************/\n\n");
+        printf("1.Insert a number\n");
+        printf("2.Insert many random numbers\n");
+        printf("3.Delete\n");
+        printf("4.Traversal B-tree\n");
+        printf("5.Traversal leaf\n");
+        printf("6.Clear\n");
+        printf("7.Write_File\n");
+        printf("8.Read_File\n");
+        printf("9.Clear_tree\n");
+        printf("10.Exit\n");
+        printf("\n/**********************************************************/\n\n");
         printf("Input Cmd: ");
         scanf("%d",&Cmd);
-        if(Cmd  == 1 || Cmd  == 2 || Cmd  == 3 || Cmd  == 4 || Cmd  == 5 || Cmd  == 6)
+        if(Cmd % 11 == Cmd)
         {
             switch(Cmd)
             {
                 case 1:
                     //system("clear");
-                    printf("\nInput insert val: ");
+                    printf("Input insert val: ");
                     scanf("%d",&Insert_val);
                     BTInsert(T, Insert_val);
-                    printf("Insert_result:\n");
+
+                    printf("\nSequence traversal:\n");
                     BTtraversal_level(T -> Root);
+
+                    printf("\nList traversal:\n");
+                    BTtraversal_leaf(head);
+                    
                     break;
                 case 2:
+                    //srand(time(NULL));
+                    printf("Input the number of inserted Numbers:");
+                    scanf("%d",&Insert_num);
+                    gettimeofday(&start,NULL);//获取程序开始时间
+                    for(i = 0; i < Insert_num; i++)
+                        BTInsert(T, i);
+                        //BTInsert(T, rand() % 10000000);
+                    
+                    gettimeofday(&finish,NULL);
+                    Complate_time = (double)((finish.tv_sec-start.tv_sec) * 1000000 + (finish.tv_usec-start.tv_usec)) / 1000000;
+                    printf("\nInsert complated !\ntime: %.3f s\n",Complate_time);
+                    break;
+                case 3:
                     //system("clear");
-                    printf("\nInput delete val: ");
+                    printf("Input delete val: ");
                     scanf("%d",&Delete_val);
-                    printf("Origin:\n");
-                    BTtraversal_level(T -> Root);
-                    BTtraversal_leaf(head);
                     Btree_Delete_stat = BTDelete(T, T->Root, Delete_val);
                     if(Success == Btree_Delete_stat)
                     {
-                        printf("Delete_result:\n");
+                        printf("\nDelete_result:\n");
                         BTtraversal_level(T -> Root);
-                        BTtraversal_leaf(head);
                     }
                     else
                         printf("Not found val:%d\n",Delete_val);
                     break;
-                case 3:
+                case 4:
                     //system("clear");
-                    printf("\nTraversal B-tree:\n");
+                    printf("\nSequence traversal:\n");
                     BTtraversal_level(T -> Root);
                     break;
-                case 4:
-                    printf("\nTraversal leaf:\n");
+                case 5:
+                    printf("\nList traversal:\n");
                     BTtraversal_leaf(head);
                     break;
-                case 5:
+                case 6:
                     system("clear");
                     break;
-                case 6:
+                case 7:
+                    if((BT_File_fp = fopen(BT_File_path,"w")) == NULL)
+                        Error_Exit("Creat target file error\n");
+                    Write_BTree(BT_File_fp, T -> Root);
+                    fclose(BT_File_fp);
+                    break;
+                case 8:
+                    if((BT_File_fp = fopen(BT_File_path,"r")) == NULL)
+                        Error_Exit("Can not open file\n");
+                    Read_BTree(BT_File_fp, T -> Root, &head);
+                    fclose(BT_File_fp);
+                    break;
+                case 9:
+                    Clear_tree(T,head);
+                    BTtraversal_level(T -> Root);
+                    BTtraversal_leaf(head);
+                    break;
+                case 10:
                     return 0;
             }
         }
