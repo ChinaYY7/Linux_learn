@@ -1,4 +1,5 @@
 //gcc B-tree.c B+_Tree/Bplus_Tree.c -o ../bin/B-tree.out -I B+_Tree
+//"c":"cd $dir && gcc -g $fileName B+_Tree/Bplus_Tree.c -o ../bin/$fileNameWithoutExt.out -I B+_Tree && cd $dir/../bin && ./$fileNameWithoutExt.out",
 #include "apue.h"
 #include <time.h>
 #include <sys/time.h> 
