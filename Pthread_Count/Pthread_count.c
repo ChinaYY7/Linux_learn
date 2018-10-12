@@ -1,31 +1,7 @@
-//gcc Pthread_count.c -o ../bin/Pthread_count.out -lpthread
-//"c": "cd $dir && gcc -g $fileName -o ../bin/$fileNameWithoutExt.out -lpthread && cd $dir/../bin && ./$fileNameWithoutExt.out",
-//scp -P 8022 scp u0_a928@192.168.1.5:/data/data/com.termux/files/home/Linux_code/code/Pthread_count.c /mnt/f/Linux_code/Termux
 #include "apue.h"
 #include <pthread.h>
 #include <sys/time.h> 
-
-#define Termux 0
-#if Termux == 1
-#define Path "tmp0.tmp"
-#else
-#define Path "/mnt/f/Linux_code/tmp/Tmp_File0.tmp"
-#endif
-struct job{
-    struct job *j_next;
-    struct job *j_prev;
-    pthread_t j_id;
-    char END;
-    char File_Path[100];
-    int Offset_start;
-    int Char_num;
-};
-
-struct queue{
-    struct job *q_head;
-    struct job *q_tail;
-    pthread_rwlock_t q_lock;
-};
+#include "Pthread_count.h"
 
 int queue_init(struct queue *qp)
 {
@@ -103,9 +79,7 @@ struct job *job_find(struct queue *qp, pthread_t id)
     return (jp);
 }
 
-struct msg{
-    struct msg *m_next;
-};
+
 
 struct msg *workq;
 
@@ -203,6 +177,7 @@ void Generate_test_tmp(int file_num, int str_num)
 #endif 
     }
 }
+
 int Count_str_num(char *File_path)
 {
     char Str_tmp,Str_num_sta = 1;
@@ -224,79 +199,50 @@ int Count_str_num(char *File_path)
     return Str_num;
 }
 
-#define Thread_num 4
-struct queue Job_queue;
-struct job Thread_job [12];
-pthread_barrier_t b;
-
-void *Thr_Count(void *arg)
+//初始化队列
+void Init_Free_Queue(struct Free_queue *q)
 {
-    int i,*arg1;
-    pid_t pid;
-    pthread_t tid;
-    struct job *Now_job;
-    int Str_num = 0;
-
-    pid = getpid();
-    tid = pthread_self();
-    arg1 = arg;
-    i  = arg1[0];
-    while(1)
-    {
-        Now_job = job_find(&Job_queue,i);
-        if(Now_job != NULL)
-        {
-            job_remove(&Job_queue,Now_job);
-            if(Now_job->END)
-                break;
-            Str_num += Count_str_num(Now_job->File_Path);
-        }
-    }
-    printf("pid %lu -> New thread %d tid %lu (0x%1lx): Str_num = %d\n",(unsigned long)pid,i,(unsigned long)tid,(unsigned long)tid,Str_num);
-    pthread_barrier_wait(&b);
-    return ((void *) 1);
+	q->Thread_job = (struct job **)malloc(sizeof(struct job*) * queuesize);
+	q->tail = 0;
+	q->head = 0;
 }
 
-
-int main(void)
+//删除队列
+void DeleteQueue(struct Free_queue *q)
 {
-    int err,i;
-    pthread_t tid[Thread_num];
-    void *tret;
-    int Str_num;
-    int arg[Thread_num][2];
-    char File_path[] = Path;
+    free(q -> Thread_job);
+}
 
-    pthread_barrier_init(&b, NULL, Thread_num + 1);
-    queue_init(&Job_queue);
+//入队
+void EnQueue(struct Free_queue *q, struct job *Free_job)
+{
+	int tail = (q->tail + 1) % queuesize; 
+	if (tail == q->head)                   
+	{
+		printf("\nthe Free_queue has been filled full!\n");
+        exit(0);
+	}
+	else
+	{
+        q->Thread_job[q->tail] = Free_job;
+		q->tail = tail;
+	}
+}
 
-    //Generate_test_tmp(8,2199);
-
-    for(i = 0; i < Thread_num; i++)
-    {
-        arg[i][0]=i;
-        if(pthread_create(&tid[i], NULL, Thr_Count, (void *)arg[i]) != 0)
-            Error_Exit("can't create thread");
-    }
-    
-    for(i = 0; i < 8; i++)
-    {
-        #if Termux == 1
-        File_path[3] = '0' + i;
-        #else
-        File_path[30] = '0' + i;
-        #endif
-        strcpy(Thread_job[i].File_Path,File_path);
-        Thread_job[i].j_id = i % 4;
-        Thread_job[i].END = 0;
-        job_append(&Job_queue,&Thread_job[i]);
-    }
-    for(i = 0; i < Thread_num; i++)
-    {
-        Thread_job[i + 8].j_id = i;
-        Thread_job[i + 8].END = 1;
-        job_append(&Job_queue,&Thread_job[i + 8]);
-    }
-    pthread_barrier_wait(&b);
-    exit(0);
+//出队
+struct job *DeQueue(struct Free_queue *q)
+{
+	struct job *tmp;
+	if (q->tail == q->head)     
+	{
+		printf("the queue is NULL\n");
+        //exit(0);
+        return NULL;
+	}
+	else
+	{
+		tmp = q->Thread_job[q->head];
+		q->head = (q->head + 1) % queuesize;
+	}
+	return tmp;
 }
