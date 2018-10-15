@@ -8,6 +8,7 @@
 
 struct queue Job_queue;
 struct job Thread_job [Job_num];
+struct msg Thread_msg[Thread_num + 1];
 
 pthread_barrier_t b;
 
@@ -38,15 +39,38 @@ void *Thr_Count(void *arg)
             Now_job->Free = True;
         }
     }
-    printf("pid %lu -> New thread %d tid %lu (0x%1lx): Str_num = %d\n",(unsigned long)pid,i,(unsigned long)tid,(unsigned long)tid,Str_num);
+    Thread_msg[i].Str_num = Str_num;
+    Thread_msg[i].END = False;
+    enqueue_msg(&Thread_msg[i]);
+    printf("pid %lu -> Count thread %d tid %lu (0x%1lx): Str_num = %d\n",(unsigned long)pid,i,(unsigned long)tid,(unsigned long)tid,Str_num);
     pthread_barrier_wait(&b);
     return ((void *) 1);
 }
+void *Thr_Sum(void *arg)
+{
+    pid_t pid;
+    pthread_t tid;
+    struct msg *Thread_receive_msg;
+    int Str_num = 0;
+
+    pid = getpid();
+    tid = pthread_self();
+    while(1)
+    {
+        Thread_receive_msg = process_msg();
+        if(Thread_receive_msg->END == True)
+            break;
+        Str_num += Thread_receive_msg->Str_num;
+    }
+    printf("\npid %lu -> Sum thread tid %lu (0x%1lx): Str_num = %d\n",(unsigned long)pid,(unsigned long)tid,(unsigned long)tid,Str_num);
+    return ((void *) 1);
+}
+
 
 int main(void)
 {
     int err,i;
-    pthread_t tid[Thread_num];
+    pthread_t tid[Thread_num + 1];
     void *tret;
     int Str_num,Free_job_suffix = Job_num;
     int arg[Thread_num][2];
@@ -56,8 +80,7 @@ int main(void)
     queue_init(&Job_queue);
     Thread_job_init(Thread_job);
 
-
-    Generate_test_tmp(File_num,2000);
+    Generate_test_tmp(File_num,Str_count);
 
     for(i = 0; i < Thread_num; i++)
     {
@@ -65,7 +88,9 @@ int main(void)
         if(pthread_create(&tid[i], NULL, Thr_Count, (void *)arg[i]) != 0)
             Error_Exit("can't create thread");
     }
-    
+    if(pthread_create(&tid[Thread_num], NULL, Thr_Sum, (void *)arg[i]) != 0)
+            Error_Exit("can't create thread");
+
     for(i = 0; i < File_num; i++)
     {
         #if Termux == 1
@@ -94,6 +119,12 @@ int main(void)
         job_append(&Job_queue,&Thread_job[Free_job_suffix]);
     }
     pthread_barrier_wait(&b);
+
+    Thread_msg[Thread_num].END = True;
+    enqueue_msg(&Thread_msg[Thread_num]);
+
+    if (pthread_join(tid[Thread_num], NULL) != 0)
+        Error_Exit("can't join with thread 1");
     Remove_tmp_file(File_num);
     exit(0);
 }

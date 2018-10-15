@@ -2,8 +2,9 @@
 #define _PTHREAD_COUNT_H
 
 #define Termux 0
-#define Thread_num 4
-#define File_num 10
+#define Thread_num 6
+#define File_num 50
+#define Str_count 100
 #define Job_num Thread_num + 2
 #define queuesize (Thread_num + 2)
 
@@ -43,6 +44,8 @@ struct Free_queue
 };
 struct msg{
     struct msg *m_next;
+    int Str_num;
+    Bool END;
 };
 
 int queue_init(struct queue *qp);
@@ -51,7 +54,7 @@ void job_append(struct queue *qp, struct job *jp);
 void job_remove(struct queue *qp, struct job *jp);
 struct job *job_find(struct queue *qp, pthread_t id);
 void enqueue_msg(struct msg *mp);
-void process_msg(void);
+struct msg *process_msg(void);
 void Error_Exit(const char *str);
 void printids(const char *s);
 void Generate_test_tmp(int file_num, int str_num);

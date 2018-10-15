@@ -95,18 +95,19 @@ void enqueue_msg(struct msg *mp)
     pthread_cond_signal(&qready); 
 }
 
-void process_msg(void)
+struct msg *process_msg(void)
 {
     struct msg *mp;
-    for(;;)
-    {
-        pthread_mutex_lock(&qlock);
-        while(workq == NULL)
-            pthread_cond_wait(&qready,&qlock);
-        mp = workq;
-        workq = mp->m_next;
-        pthread_mutex_unlock(&qlock);
-    }
+    
+    pthread_mutex_lock(&qlock);
+    while(workq == NULL)
+        pthread_cond_wait(&qready,&qlock);
+    mp = workq;
+    workq = mp->m_next;
+    pthread_mutex_unlock(&qlock);
+
+    return mp;
+    
 }
 
 //出错处理
