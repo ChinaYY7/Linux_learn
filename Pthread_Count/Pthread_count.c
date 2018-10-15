@@ -134,8 +134,6 @@ void Generate_test_tmp(int file_num, int str_num)
     char File_path[] = Path;
     char str[11];
     srand(time(NULL));
-    if(file_num >= 10)
-        file_num = 9;
     while(file_num--)
     {
         if((Tmp_File_fp[i] = fopen(File_path,"w")) == NULL)
@@ -176,6 +174,39 @@ void Generate_test_tmp(int file_num, int str_num)
         File_path[30] = '0' + i;
 #endif 
     }
+}
+
+void Remove_tmp_file(int file_num)
+{
+    char File_path[] = Path;
+    while(file_num--)
+    {
+        if(remove(File_path))
+            Error_Exit("Can't delete file\n");
+#if Termux == 1
+        File_path[3] = '0' + file_num;
+#else
+        File_path[30] = '0' + file_num;
+#endif 
+    }
+}
+
+void Thread_job_init(struct job *Thread_job)
+{
+    int i;
+    for (i = 0; i < Job_num; i++)
+        Thread_job[i].Free = True;
+}
+
+int Find_Free_job(struct job *Thread_job)
+{
+    int i;
+    for (i = 0; i < Job_num; i++)
+    {
+        if(True == Thread_job[i].Free)
+            break;
+    }
+    return i;
 }
 
 int Count_str_num(char *File_path)

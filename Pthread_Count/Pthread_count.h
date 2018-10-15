@@ -3,8 +3,9 @@
 
 #define Termux 0
 #define Thread_num 4
+#define File_num 10
+#define Job_num Thread_num + 2
 #define queuesize (Thread_num + 2)
-#define Job_num 12
 
 
 #if Termux == 1
@@ -13,11 +14,17 @@
 #define Path "/mnt/f/Linux_code/tmp/Tmp_File0.tmp"
 #endif
 
+typedef enum BoolType{
+    False = 0,
+    True = 1
+}Bool;
+
 struct job{
     struct job *j_next;
     struct job *j_prev;
     pthread_t j_id;
-    char END;
+    Bool END;
+    Bool Free;
     char File_Path[100];
     int Offset_start;
     int Char_num;
@@ -48,10 +55,16 @@ void process_msg(void);
 void Error_Exit(const char *str);
 void printids(const char *s);
 void Generate_test_tmp(int file_num, int str_num);
+void Remove_tmp_file(int file_num);
+int Find_Free_job(struct job *Thread_job);
+void Thread_job_init(struct job *Thread_job);
+
 int Count_str_num(char *File_path);
 void Init_Free_Queue(struct Free_queue *q);
 void DeleteQueue(struct Free_queue *q);
 void EnQueue(struct Free_queue *q, struct job *Free_job);
+
+
 struct job *DeQueue(struct Free_queue *q);
 
 

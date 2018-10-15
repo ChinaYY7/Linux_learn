@@ -29,9 +29,13 @@ void *Thr_Count(void *arg)
         if(Now_job != NULL)
         {
             job_remove(&Job_queue,Now_job);
-            if(Now_job->END)
+            if(Now_job->END == True)
+            {
+                Now_job->Free = True;
                 break;
+            }
             Str_num += Count_str_num(Now_job->File_Path);
+            Now_job->Free = True;
         }
     }
     printf("pid %lu -> New thread %d tid %lu (0x%1lx): Str_num = %d\n",(unsigned long)pid,i,(unsigned long)tid,(unsigned long)tid,Str_num);
@@ -44,15 +48,16 @@ int main(void)
     int err,i;
     pthread_t tid[Thread_num];
     void *tret;
-    int Str_num;
+    int Str_num,Free_job_suffix = Job_num;
     int arg[Thread_num][2];
     char File_path[] = Path;
 
     pthread_barrier_init(&b, NULL, Thread_num + 1);
     queue_init(&Job_queue);
+    Thread_job_init(Thread_job);
 
 
-    //Generate_test_tmp(8,2199);
+    Generate_test_tmp(File_num,2000);
 
     for(i = 0; i < Thread_num; i++)
     {
@@ -61,24 +66,34 @@ int main(void)
             Error_Exit("can't create thread");
     }
     
-    for(i = 0; i < 8; i++)
+    for(i = 0; i < File_num; i++)
     {
         #if Termux == 1
         File_path[3] = '0' + i;
         #else
         File_path[30] = '0' + i;
         #endif
-        strcpy(Thread_job[i].File_Path,File_path);
-        Thread_job[i].j_id = i % 4;
-        Thread_job[i].END = 0;
-        job_append(&Job_queue,&Thread_job[i]);
+        do
+            Free_job_suffix = Find_Free_job(Thread_job);
+        while(Free_job_suffix == Job_num);
+        strcpy(Thread_job[Free_job_suffix].File_Path,File_path);
+        Thread_job[Free_job_suffix].j_id = i % Thread_num;
+        Thread_job[Free_job_suffix].END = False;
+        Thread_job[Free_job_suffix].Free = False;
+        job_append(&Job_queue,&Thread_job[Free_job_suffix]);
     }
+    
     for(i = 0; i < Thread_num; i++)
     {
-        Thread_job[i + 8].j_id = i;
-        Thread_job[i + 8].END = 1;
-        job_append(&Job_queue,&Thread_job[i + 8]);
+        do
+            Free_job_suffix = Find_Free_job(Thread_job);
+        while(Free_job_suffix == Job_num);
+        Thread_job[Free_job_suffix].j_id = i;
+        Thread_job[Free_job_suffix].END = True;
+        Thread_job[Free_job_suffix].Free = False;
+        job_append(&Job_queue,&Thread_job[Free_job_suffix]);
     }
     pthread_barrier_wait(&b);
+    Remove_tmp_file(File_num);
     exit(0);
 }
