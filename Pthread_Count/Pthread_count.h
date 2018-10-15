@@ -2,9 +2,9 @@
 #define _PTHREAD_COUNT_H
 
 #define Termux 0
-#define Thread_num 6
+#define Thread_num 5
 #define File_num 50
-#define Str_count 100
+#define Str_count 10000
 #define Job_num Thread_num + 2
 #define queuesize (Thread_num + 2)
 

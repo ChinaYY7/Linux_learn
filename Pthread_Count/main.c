@@ -75,13 +75,15 @@ int main(void)
     int Str_num,Free_job_suffix = Job_num;
     int arg[Thread_num][2];
     char File_path[] = Path;
+    struct timeval start,finish;
+    double Complate_time;
 
     pthread_barrier_init(&b, NULL, Thread_num + 1);
     queue_init(&Job_queue);
     Thread_job_init(Thread_job);
 
     Generate_test_tmp(File_num,Str_count);
-
+    gettimeofday(&start,NULL);//获取程序开始时间
     for(i = 0; i < Thread_num; i++)
     {
         arg[i][0]=i;
@@ -125,6 +127,9 @@ int main(void)
 
     if (pthread_join(tid[Thread_num], NULL) != 0)
         Error_Exit("can't join with thread 1");
+    gettimeofday(&finish,NULL);
+    Complate_time = (double)((finish.tv_sec-start.tv_sec) * 1000000 + (finish.tv_usec-start.tv_usec)) / 1000000;
+    printf("\nCount complated !\ntime: %.3f s\n",Complate_time);
     Remove_tmp_file(File_num);
     exit(0);
 }
