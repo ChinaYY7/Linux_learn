@@ -18,5 +18,10 @@
 #define DIR_MODE (FILE_MODE | S_IXUSR | S_IXGRP | S_IXOTH)
 
 
+typedef enum BoolType{
+    False = 0,
+    True = 1
+}Bool;
+
 
 #endif

@@ -2,6 +2,7 @@
 #include <pthread.h>
 #include <sys/time.h> 
 #include "Pthread_count.h"
+#include "Tree.h"
 
 int queue_init(struct queue *qp)
 {
@@ -142,7 +143,7 @@ void Generate_test_tmp(int file_num, int str_num)
         str_num_var = str_num;
         while(str_num_var--)
         {
-            str_count = rand() % 10;
+            str_count = rand() % STR_MAX;
             if(str_count == 0 || str_count == 1)
                 str_count = 2;
             for(j = 0; j < str_count; j++)
@@ -213,7 +214,7 @@ int Find_Free_job(struct job *Thread_job)
 int Count_str_num(char *File_path)
 {
     char Str_tmp,Str_num_sta = 1;
-    int Read_count,Str_num = 0;
+    int Str_num = 0;
     FILE *Tmp_File_fp;
     if((Tmp_File_fp = fopen(File_path,"r")) == NULL)
         Error_Exit("Can not open file\n");
@@ -228,53 +229,47 @@ int Count_str_num(char *File_path)
         else
             Str_num_sta = 1; 
     }
+    if(Str_num_sta == 1)
+        Str_num++;
     return Str_num;
 }
 
-//初始化队列
-void Init_Free_Queue(struct Free_queue *q)
+int Tree_Count_str_num(char *File_path)
 {
-	q->Thread_job = (struct job **)malloc(sizeof(struct job*) * queuesize);
-	q->tail = 0;
-	q->head = 0;
+    char Str_tmp,Insert_sta = 0;
+    int Str_num = 0;
+    FILE *Tmp_File_fp;
+    CPtrT T_root;
+    char String[STR_MAX + 1];
+    int i = 0;
+
+    TCreateTree(&T_root);
+
+    if((Tmp_File_fp = fopen(File_path,"r")) == NULL)
+        Error_Exit("Can not open file\n");
+    while(fread(&Str_tmp,sizeof(char),1,Tmp_File_fp))
+    {
+        if(Str_tmp >= 'a' && Str_tmp <= 'z')
+        {
+            String[i] = Str_tmp;
+            i++;
+            String[i] = '\0';
+            Insert_sta = 1;
+        }
+        else
+        {
+            if(Insert_sta == 1)
+            {
+                TInsert(T_root, String);
+                Insert_sta = 0;
+                i = 0;
+            }
+        }
+    }
+    if(Insert_sta == 1)
+        TInsert(T_root, String);
+
+    Str_num = Ttraversal_level(T_root->Root);
+    return Str_num;
 }
 
-//删除队列
-void DeleteQueue(struct Free_queue *q)
-{
-    free(q -> Thread_job);
-}
-
-//入队
-void EnQueue(struct Free_queue *q, struct job *Free_job)
-{
-	int tail = (q->tail + 1) % queuesize; 
-	if (tail == q->head)                   
-	{
-		printf("\nthe Free_queue has been filled full!\n");
-        exit(0);
-	}
-	else
-	{
-        q->Thread_job[q->tail] = Free_job;
-		q->tail = tail;
-	}
-}
-
-//出队
-struct job *DeQueue(struct Free_queue *q)
-{
-	struct job *tmp;
-	if (q->tail == q->head)     
-	{
-		printf("the queue is NULL\n");
-        //exit(0);
-        return NULL;
-	}
-	else
-	{
-		tmp = q->Thread_job[q->head];
-		q->head = (q->head + 1) % queuesize;
-	}
-	return tmp;
-}

@@ -1,10 +1,11 @@
-//gcc main.c Pthread_count.c -o ../../bin/Pthread_count.out -lpthread
+//gcc main.c Pthread_count.c Tree.c -o ../../bin/Pthread_count.out -lpthread
 //"c": "cd $dir && gcc -g main.c Pthread_count.c -o ../../bin/Pthread_count.out -lpthread && cd $dir/../../bin && ./Pthread_count.out",
 //scp -P 8022 scp u0_a928@192.168.1.5:/data/data/com.termux/files/home/Linux_code/code/Pthread_count.c /mnt/f/Linux_code/Termux
 #include "apue.h"
 #include <pthread.h>
 #include <sys/time.h> 
 #include "Pthread_count.h"
+#include "Tree.h"
 
 struct queue Job_queue;
 struct job Thread_job [Job_num];
@@ -36,6 +37,7 @@ void *Thr_Count(void *arg)
                 break;
             }
             Str_num += Count_str_num(Now_job->File_Path);
+            //Str_num += Tree_Count_str_num(Now_job->File_Path);
             Now_job->Free = True;
         }
     }
