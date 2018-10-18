@@ -2,7 +2,6 @@
 #include <pthread.h>
 #include <sys/time.h> 
 #include "Pthread_count.h"
-#include "Tree.h"
 
 int queue_init(struct queue *qp)
 {
@@ -234,12 +233,12 @@ int Count_str_num(char *File_path)
     return Str_num;
 }
 
-int Tree_Count_str_num(char *File_path)
+void Tree_Count_str_num(char *File_path,Vocabulary_info *Vocabulary)
 {
     char Str_tmp,Insert_sta = 0;
     int Str_num = 0;
     FILE *Tmp_File_fp;
-    CPtrT T_root;
+    PtrT T_root;
     char String[STR_MAX + 1];
     int i = 0;
 
@@ -269,7 +268,6 @@ int Tree_Count_str_num(char *File_path)
     if(Insert_sta == 1)
         TInsert(T_root, String);
 
-    Str_num = Ttraversal_level(T_root->Root);
-    return Str_num;
+    Ttraversal_level(T_root->Root,Vocabulary);
 }
 

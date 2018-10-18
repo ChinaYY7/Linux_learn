@@ -1,11 +1,12 @@
 #ifndef _PTHREAD_COUNT_H
 #define _PTHREAD_COUNT_H
 #include "apue.h"
+#include "Tree.h"
 
 #define Termux 0
-#define Thread_num 1
-#define File_num 1
-#define Str_count 592500
+#define Thread_num 5
+#define File_num 10
+#define Str_count 20000
 #define STR_MAX 10
 #define Job_num Thread_num + 2
 
@@ -37,6 +38,7 @@ struct queue{
 struct msg{
     struct msg *m_next;
     int Str_num;
+    Vocabulary_info *Vocabulary;
     Bool END;
 };
 
@@ -55,6 +57,6 @@ int Find_Free_job(struct job *Thread_job);
 void Thread_job_init(struct job *Thread_job);
 
 int Count_str_num(char *File_path);
-int Tree_Count_str_num(char *File_path);
+void Tree_Count_str_num(char *File_path, Vocabulary_info *Vocabulary);
 
 #endif

@@ -10,6 +10,7 @@
 struct queue Job_queue;
 struct job Thread_job [Job_num];
 struct msg Thread_msg[Thread_num + 1];
+Vocabulary_info Vocabulary_info_result[Thread_num + 1];
 
 pthread_barrier_t b;
 
@@ -25,6 +26,8 @@ void *Thr_Count(void *arg)
     tid = pthread_self();
     arg1 = arg;
     i  = arg1[0];
+
+    Vocabulary_info tmp;
     while(1)
     {
         Now_job = job_find(&Job_queue,i);
@@ -36,15 +39,22 @@ void *Thr_Count(void *arg)
                 Now_job->Free = True;
                 break;
             }
-            Str_num += Count_str_num(Now_job->File_Path);
-            //Str_num += Tree_Count_str_num(Now_job->File_Path);
+            //Str_num += Count_str_num(Now_job->File_Path);
+            Tree_Count_str_num(Now_job->File_Path, &tmp);
+            Merge_Vocabulary_Result(&Vocabulary_info_result[i],&tmp);
             Now_job->Free = True;
         }
     }
-    Thread_msg[i].Str_num = Str_num;
+    //Thread_msg[i].Str_num = Str_num;
+    Thread_msg[i].Vocabulary = &Vocabulary_info_result[i];
     Thread_msg[i].END = False;
     enqueue_msg(&Thread_msg[i]);
-    printf("pid %lu -> Count thread %d tid %lu (0x%1lx): Str_num = %d\n",(unsigned long)pid,i,(unsigned long)tid,(unsigned long)tid,Str_num);
+    printf("pid %lu->Count thread %d tid %lu (0x%1lx):  Sum = %d,  Kind = %d,  Repetition = %d,  Average = %.2f,  Max = %d(%s),  Min = %d(%s)\n",
+    (unsigned long)pid,i,(unsigned long)tid,(unsigned long)tid,Vocabulary_info_result[i].Sum,Vocabulary_info_result[i].Kind_vocabulary_num,
+    Vocabulary_info_result[i].Repetition_vocabulary_num,Vocabulary_info_result[i].Average_repetition_num,Vocabulary_info_result[i].Max_repetition_num
+    ,Vocabulary_info_result[i].Max_repetition_vocabulary,Vocabulary_info_result[i].Min_repetition_num,Vocabulary_info_result[i].Min_repetition_vocabulary);
+
+    //printf("pid %lu -> Count thread %d tid %lu (0x%1lx): Str_num = %d\n",(unsigned long)pid,i,(unsigned long)tid,(unsigned long)tid,Str_num);
     pthread_barrier_wait(&b);
     return ((void *) 1);
 }
@@ -54,17 +64,23 @@ void *Thr_Sum(void *arg)
     pthread_t tid;
     struct msg *Thread_receive_msg;
     int Str_num = 0;
+    Bool First_sta = True;
 
     pid = getpid();
     tid = pthread_self();
     while(1)
     {
         Thread_receive_msg = process_msg();
-        if(Thread_receive_msg->END == True)
+        //Thread_receive_msg->Vocabulary->Sum;
+        if(True == Thread_receive_msg->END)
             break;
-        Str_num += Thread_receive_msg->Str_num;
+        Merge_Vocabulary_Result(&Vocabulary_info_result[Thread_num],Thread_receive_msg->Vocabulary);
     }
-    printf("\npid %lu -> Sum thread tid %lu (0x%1lx): Str_num = %d\n",(unsigned long)pid,(unsigned long)tid,(unsigned long)tid,Str_num);
+    //printf("\npid %lu -> Sum thread tid %lu (0x%1lx): Str_num = %d\n",(unsigned long)pid,(unsigned long)tid,(unsigned long)tid,Str_num);
+    printf("\npid %lu->Sum thread tid %lu (0x%1lx):  Sum = %d,  Kind = %d,  Repetition = %d,  Average = %.2f,  Max = %d(%s),  Min = %d(%s)\n",
+    (unsigned long)pid,(unsigned long)tid,(unsigned long)tid,Vocabulary_info_result[Thread_num].Sum,Vocabulary_info_result[Thread_num].Kind_vocabulary_num,
+    Vocabulary_info_result[Thread_num].Repetition_vocabulary_num,Vocabulary_info_result[Thread_num].Average_repetition_num,Vocabulary_info_result[Thread_num].Max_repetition_num
+    ,Vocabulary_info_result[Thread_num].Max_repetition_vocabulary,Vocabulary_info_result[Thread_num].Min_repetition_num,Vocabulary_info_result[Thread_num].Min_repetition_vocabulary);
     return ((void *) 1);
 }
 
@@ -83,6 +99,7 @@ int main(void)
     pthread_barrier_init(&b, NULL, Thread_num + 1);
     queue_init(&Job_queue);
     Thread_job_init(Thread_job);
+    Vocabulary_Info_Result_Init(Vocabulary_info_result, Thread_num + 1);
 
     Generate_test_tmp(File_num,Str_count);
     gettimeofday(&start,NULL);//获取程序开始时间
