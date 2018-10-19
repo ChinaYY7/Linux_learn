@@ -3,7 +3,6 @@
 #include "apue.h"
 #include "Tree.h"
 
-#define Termux 0
 #define Thread_num 5
 #define File_num 10
 #define Str_count 20000

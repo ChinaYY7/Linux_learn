@@ -1,9 +1,15 @@
 #ifndef _APUE_H
 #define _APUE_H
 
+#define Termux 1
+
 #include <sys/types.h>
 #include <sys/stat.h>
+#if Termux == 1
+#include <termios.h>
+#else
 #include <sys/termios.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
