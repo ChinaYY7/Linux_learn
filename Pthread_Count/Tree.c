@@ -23,6 +23,30 @@ void TCreateTree(PtrT *T)
     (*T)->Root = TAllocateNode('0');
 }
 
+void Destroy_Tree(PtrT *T)
+{
+    Tree_Queue TNode_Queue;
+    PtrTNode tmp;
+    int i;
+
+    if(NULL == (*T)->Root)
+        exit(0);
+    InitQueue(&TNode_Queue);
+    EnQueue(&TNode_Queue,(*T)->Root);
+
+    while(TNode_Queue.head != TNode_Queue.tail)
+    {
+        tmp = DeQueue(&TNode_Queue);
+        for(i = 0; i < Alphabet_num; i++)
+        {
+            if(tmp->Child[i] != NULL)
+                EnQueue(&TNode_Queue,tmp->Child[i]);
+        }
+        free(tmp);
+    }
+    DeleteQueue(&TNode_Queue);
+}
+
 //初始化队列
 void InitQueue(Tree_Queue *q)
 {
@@ -34,9 +58,7 @@ void InitQueue(Tree_Queue *q)
 //删除队列
 void DeleteQueue(Tree_Queue *q)
 {
-    //int i;
-    //for( i = 0; i < queuesize; i++)
-        free(q -> Tree_Queue_TNode);
+    free(q -> Tree_Queue_TNode);
 }
 
 //入队
@@ -135,7 +157,7 @@ void Ttraversal_level(PtrTNode Root, Vocabulary_info *Vocabulary)
 {
     Tree_Queue TNode_Queue;
     PtrTNode tmp;
-    int i,Exchange_tmp;
+    int i;
     int String_sum = 0;
     Bool First_sta = True;
 

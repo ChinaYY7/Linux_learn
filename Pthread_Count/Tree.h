@@ -41,6 +41,7 @@ typedef struct Vocabulary
 
 
 void TCreateTree(PtrT *T);
+void Destroy_Tree(PtrT *T);
 void Ttraversal_level(PtrTNode Root, Vocabulary_info *Vocabulary);
 void TInsert(PtrT T, char *String);
 PtrTNode TAllocateNode(char Alphabet);

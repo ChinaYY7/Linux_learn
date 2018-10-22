@@ -196,7 +196,11 @@ void Thread_job_init(struct job *Thread_job)
 {
     int i;
     for (i = 0; i < Job_num; i++)
+    {
         Thread_job[i].Free = True;
+        Thread_job[i].Path_men_sta = False;
+    }
+        
 }
 
 int Find_Free_job(struct job *Thread_job)
@@ -271,3 +275,43 @@ void Tree_Count_str_num(char *File_path,Vocabulary_info *Vocabulary)
     Ttraversal_level(T_root->Root,Vocabulary);
 }
 
+void Vocabulary_Insert_Tree(char *File_path, PtrT T)
+{
+    char Str_tmp,Insert_sta = 0;
+    int Str_num = 0;
+    FILE *Tmp_File_fp;
+    char String[STR_MAX + 1];
+    int i = 0;
+
+    if((Tmp_File_fp = fopen(File_path,"r")) == NULL)
+        Error_Exit("Can not open file\n");
+    while(fread(&Str_tmp,sizeof(char),1,Tmp_File_fp))
+    {
+        if(Str_tmp >= 'a' && Str_tmp <= 'z')
+        {
+            String[i] = Str_tmp;
+            i++;
+            String[i] = '\0';
+            Insert_sta = 1;
+        }
+        else
+        {
+            if(Insert_sta == 1)
+            {
+                TInsert(T, String);
+                Insert_sta = 0;
+                i = 0;
+            }
+        }
+    }
+    if(Insert_sta == 1)  //最后的词汇后面可能没有空格等
+        TInsert(T, String);
+    fclose(Tmp_File_fp);
+}
+
+void Print_Vocabulary_Result(Vocabulary_info Vocabulary)
+{
+    printf("Sum = %d,  Kind = %d,  Repetition = %d,  Average = %.2f,  Max = %d(%s),  Min = %d(%s)\n",Vocabulary.Sum,Vocabulary.Kind_vocabulary_num,
+    Vocabulary.Repetition_vocabulary_num,Vocabulary.Average_repetition_num,Vocabulary.Max_repetition_num
+    ,Vocabulary.Max_repetition_vocabulary,Vocabulary.Min_repetition_num,Vocabulary.Min_repetition_vocabulary);
+}

@@ -1,7 +1,7 @@
 #ifndef _APUE_H
 #define _APUE_H
 
-#define Termux 1
+#define Termux 0
 
 #include <sys/types.h>
 #include <sys/stat.h>
