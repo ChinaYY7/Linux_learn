@@ -13,7 +13,7 @@ int main(void)
 {
     int i;
     Vocabulary_info Vocabulary_info_result;
-    Generate_test_tmp(File_num,Str_count);
+    //Generate_test_tmp(File_num,Str_count);
     PtrT T_root;
 
     TCreateTree(&T_root);

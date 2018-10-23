@@ -2,9 +2,9 @@
 #define _TREE_H
 #include "apue.h"
 
-#define STR_MAX 10
+#define STR_MAX 20
 #define queuesize 1000000
-#define Alphabet_num 26 
+#define Alphabet_num 53 
 
 //Tree节点结构体
 typedef struct TreeNode{
@@ -29,7 +29,7 @@ typedef struct Tree_queue
 
 typedef struct Vocabulary
 {
-    int Sum;
+    long int Sum;
     int Max_repetition_num;
     int Min_repetition_num;
     float Average_repetition_num;
@@ -50,6 +50,7 @@ void DeleteQueue(Tree_Queue *q);
 void EnQueue(Tree_Queue *q, PtrTNode TNode);
 PtrTNode DeQueue(Tree_Queue *q);
 void Merge_Vocabulary_Result(Vocabulary_info *Vocabulary1, Vocabulary_info *Vocabulary2);
+void Merge_Vocabulary_Tree(PtrTNode Root1, PtrTNode Root2);
 void Vocabulary_Info_Result_Init(Vocabulary_info *Vocabulary, int num);
 
 

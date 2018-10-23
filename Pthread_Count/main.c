@@ -1,5 +1,5 @@
-//gcc main.c Pthread_count.c Tree.c -o ../../bin/Pthread_count.out -lpthread
-//"c": "cd $dir && gcc -g main.c Pthread_count.c -o ../../bin/Pthread_count.out -lpthread && cd $dir/../../bin && ./Pthread_count.out",
+//gcc -g main.c Pthread_count.c Tree.c Directory_traversal.c -o ../../bin/Pthread_count.out -lpthread
+//"c": "cd $dir && gcc -g main.c Pthread_count.c Tree.c Directory_traversal.c -o ../../bin/Pthread_count.out -lpthread && cd $dir/../../bin && ./Pthread_count.out /mnt/f/Linux_code/tmp",
 //scp -P 8022 scp u0_a928@192.168.1.5:/data/data/com.termux/files/home/Linux_code/code/Pthread_count.c /mnt/f/Linux_code/Termux
 #include "apue.h"
 #include <pthread.h>
@@ -18,16 +18,10 @@ pthread_barrier_t b;
 void *Thr_Count(void *arg)
 {
     int i,*arg1;
-    pid_t pid;
-    pthread_t tid;
     struct job *Now_job;
-    int Str_num = 0;
     PtrT T_root;
 
     TCreateTree(&T_root);
-
-    pid = getpid();
-    tid = pthread_self();
     arg1 = arg;
     i  = arg1[0];
 
@@ -46,38 +40,39 @@ void *Thr_Count(void *arg)
             Now_job->Free = True;
         }
     }
-    Ttraversal_level(T_root->Root,&Vocabulary_info_result[i]);
-    Thread_msg[i].Vocabulary = &Vocabulary_info_result[i];
-    Thread_msg[i].END = False;
+
+    Thread_msg[i].T = T_root;
     enqueue_msg(&Thread_msg[i]);
 
-    printf("pid %lu->Count thread %d tid %lu (0x%1lx): ",(unsigned long)pid,i,(unsigned long)tid,(unsigned long)tid);
-    Print_Vocabulary_Result(Vocabulary_info_result[i]);
-
-    Destroy_Tree(&T_root);
     pthread_barrier_wait(&b);
+    Destroy_Tree(&T_root);
     return ((void *) 1);
 }
 void *Thr_Sum(void *arg)
 {
-    pid_t pid;
-    pthread_t tid;
-    struct msg *Thread_receive_msg;
-    int Str_num = 0;
-    Bool First_sta = True;
+    
+    int i = 0;
 
-    pid = getpid();
-    tid = pthread_self();
+    struct msg *Thread_receive_msg;
+    PtrT T_root;
+
+    TCreateTree(&T_root);
+
     while(1)
     {
         Thread_receive_msg = process_msg();
-        if(True == Thread_receive_msg->END)
+        Merge_Vocabulary_Tree(T_root->Root,Thread_receive_msg->T->Root);
+        i++;
+        if(i == Thread_num)
             break;
-        Merge_Vocabulary_Result(&Vocabulary_info_result[Thread_num],Thread_receive_msg->Vocabulary);
     }
 
-    printf("\npid %lu->Sum thread tid %lu (0x%1lx): ",(unsigned long)pid,(unsigned long)tid,(unsigned long)tid);
+    Ttraversal_level(T_root->Root,&Vocabulary_info_result[Thread_num]);
+    printids("\nStatistical results of word frequency\n");
     Print_Vocabulary_Result(Vocabulary_info_result[Thread_num]);
+    pthread_barrier_wait(&b);
+
+    Destroy_Tree(&T_root);
 
     return ((void *) 1);
 }
@@ -85,12 +80,10 @@ void *Thr_Sum(void *arg)
 
 int main(int argc, char *argv[])
 {
-    int err,i;
+    int i;
     pthread_t tid[Thread_num + 1];
-    void *tret;
-    int Str_num,Free_job_suffix = Job_num;
+    int Free_job_suffix = Job_num;
     int arg[Thread_num][2];
-    char File_path[] = Path;
     struct timeval start,finish;
     double Complate_time;
 
@@ -100,13 +93,14 @@ int main(int argc, char *argv[])
         exit(0);
     }
 
-    pthread_barrier_init(&b, NULL, Thread_num + 1);
+    pthread_barrier_init(&b, NULL, Thread_num + 2);
     queue_init(&Job_queue);
     Thread_job_init(Thread_job);
     Vocabulary_Info_Result_Init(Vocabulary_info_result, Thread_num + 1);
 
     //Generate_test_tmp(File_num,Str_count);
     gettimeofday(&start,NULL);//获取程序开始时间
+
     for(i = 0; i < Thread_num; i++)
     {
         arg[i][0]=i;
@@ -117,24 +111,10 @@ int main(int argc, char *argv[])
             Error_Exit("can't create thread");
 
     Find_Reg_File(argv[1]);// /mnt/f/Linux_code/tmp
-    
-    for(i = 0; i < Thread_num; i++)
-    {
-        do
-            Free_job_suffix = Find_Free_job(Thread_job);
-        while(Free_job_suffix == Job_num);
-        Thread_job[Free_job_suffix].j_id = i;
-        Thread_job[Free_job_suffix].END = True;
-        Thread_job[Free_job_suffix].Free = False;
-        job_append(&Job_queue,&Thread_job[Free_job_suffix]);
-    }
+    Assign_END_Job(&Job_queue,Thread_job);
+
     pthread_barrier_wait(&b);
 
-    Thread_msg[Thread_num].END = True;
-    enqueue_msg(&Thread_msg[Thread_num]);
-
-    if (pthread_join(tid[Thread_num], NULL) != 0)
-        Error_Exit("can't join with thread 1");
     gettimeofday(&finish,NULL);
     Complate_time = (double)((finish.tv_sec-start.tv_sec) * 1000000 + (finish.tv_usec-start.tv_usec)) / 1000000;
     printf("\nCount Path_name: %s complated !\ntime: %.3f s\n",argv[1], Complate_time);

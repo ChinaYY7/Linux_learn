@@ -124,7 +124,7 @@ void printids(const char *s)
 
     pid = getpid();
     tid = pthread_self();
-    printf("%s pid %lu tid %lu (0x%1lx)\n",s,(unsigned long)pid,(unsigned long)tid,(unsigned long)tid);
+    printf("%spid %lu tid %lu (0x%1lx)\n",s,(unsigned long)pid,(unsigned long)tid,(unsigned long)tid);
 }
 
 void Generate_test_tmp(int file_num, int str_num)
@@ -214,67 +214,6 @@ int Find_Free_job(struct job *Thread_job)
     return i;
 }
 
-int Count_str_num(char *File_path)
-{
-    char Str_tmp,Str_num_sta = 1;
-    int Str_num = 0;
-    FILE *Tmp_File_fp;
-    if((Tmp_File_fp = fopen(File_path,"r")) == NULL)
-        Error_Exit("Can not open file\n");
-    while(fread(&Str_tmp,sizeof(char),1,Tmp_File_fp))
-    {
-        //printf("%c",Str_tmp);
-        if((Str_tmp < 'a' || Str_tmp > 'z') && Str_num_sta)
-        {
-            Str_num_sta = 0;
-            Str_num++;
-        }
-        else
-            Str_num_sta = 1; 
-    }
-    if(Str_num_sta == 1)
-        Str_num++;
-    return Str_num;
-}
-
-void Tree_Count_str_num(char *File_path,Vocabulary_info *Vocabulary)
-{
-    char Str_tmp,Insert_sta = 0;
-    int Str_num = 0;
-    FILE *Tmp_File_fp;
-    PtrT T_root;
-    char String[STR_MAX + 1];
-    int i = 0;
-
-    TCreateTree(&T_root);
-
-    if((Tmp_File_fp = fopen(File_path,"r")) == NULL)
-        Error_Exit("Can not open file\n");
-    while(fread(&Str_tmp,sizeof(char),1,Tmp_File_fp))
-    {
-        if(Str_tmp >= 'a' && Str_tmp <= 'z')
-        {
-            String[i] = Str_tmp;
-            i++;
-            String[i] = '\0';
-            Insert_sta = 1;
-        }
-        else
-        {
-            if(Insert_sta == 1)
-            {
-                TInsert(T_root, String);
-                Insert_sta = 0;
-                i = 0;
-            }
-        }
-    }
-    if(Insert_sta == 1)
-        TInsert(T_root, String);
-
-    Ttraversal_level(T_root->Root,Vocabulary);
-}
-
 void Vocabulary_Insert_Tree(char *File_path, PtrT T)
 {
     char Str_tmp,Insert_sta = 0;
@@ -287,7 +226,7 @@ void Vocabulary_Insert_Tree(char *File_path, PtrT T)
         Error_Exit("Can not open file\n");
     while(fread(&Str_tmp,sizeof(char),1,Tmp_File_fp))
     {
-        if(Str_tmp >= 'a' && Str_tmp <= 'z')
+        if((Str_tmp >= 'a' && Str_tmp <= 'z') || (Str_tmp >= 'A' && Str_tmp <= 'Z') || Str_tmp == 39)
         {
             String[i] = Str_tmp;
             i++;
@@ -311,7 +250,23 @@ void Vocabulary_Insert_Tree(char *File_path, PtrT T)
 
 void Print_Vocabulary_Result(Vocabulary_info Vocabulary)
 {
-    printf("Sum = %d,  Kind = %d,  Repetition = %d,  Average = %.2f,  Max = %d(%s),  Min = %d(%s)\n",Vocabulary.Sum,Vocabulary.Kind_vocabulary_num,
+    printf("Sum = %ld,  Kind = %d,  Repetition = %d,  Average = %.2f,  Max = %d(%s),  Min = %d(%s)\n",Vocabulary.Sum,Vocabulary.Kind_vocabulary_num,
     Vocabulary.Repetition_vocabulary_num,Vocabulary.Average_repetition_num,Vocabulary.Max_repetition_num
     ,Vocabulary.Max_repetition_vocabulary,Vocabulary.Min_repetition_num,Vocabulary.Min_repetition_vocabulary);
+}
+
+void Assign_END_Job(struct queue *Job_queue, struct job *Thread_job)
+{
+    int i;
+    int Free_job_suffix = Job_num;
+    for(i = 0; i < Thread_num; i++)
+    {
+        do
+            Free_job_suffix = Find_Free_job(Thread_job);
+        while(Free_job_suffix == Job_num);
+        Thread_job[Free_job_suffix].j_id = i;
+        Thread_job[Free_job_suffix].END = True;
+        Thread_job[Free_job_suffix].Free = False;
+        job_append(Job_queue,&Thread_job[Free_job_suffix]);
+    }
 }

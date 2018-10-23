@@ -3,10 +3,10 @@
 #include "apue.h"
 #include "Tree.h"
 
-#define Thread_num 6
+#define Thread_num 4
 #define File_num 10
 #define Str_count 20000
-#define STR_MAX 10
+#define STR_MAX 20
 #define Job_num Thread_num + 2
 
 
@@ -36,9 +36,7 @@ struct queue{
 
 struct msg{
     struct msg *m_next;
-    int Str_num;
-    Vocabulary_info *Vocabulary;
-    Bool END;
+    PtrT T;
 };
 
 int queue_init(struct queue *qp);
@@ -55,9 +53,8 @@ void Remove_tmp_file(int file_num);
 int Find_Free_job(struct job *Thread_job);
 void Thread_job_init(struct job *Thread_job);
 
-int Count_str_num(char *File_path);
-void Tree_Count_str_num(char *File_path, Vocabulary_info *Vocabulary);
 void Vocabulary_Insert_Tree(char *File_path, PtrT T);
 void Print_Vocabulary_Result(Vocabulary_info Vocabulary);
+void Assign_END_Job(struct queue *Job_queue, struct job *Thread_job);
 
 #endif

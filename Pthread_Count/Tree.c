@@ -102,6 +102,7 @@ void TInsert(PtrT T, char *String)
     PtrTNode NewNode;
     Tree_Queue TNode_Queue;
     PtrTNode tmp;
+    int Insert_num;
 
     InitQueue(&TNode_Queue);
 
@@ -110,19 +111,27 @@ void TInsert(PtrT T, char *String)
     while(1)
     {
         tmp = DeQueue(&TNode_Queue);
-        if(tmp->Child[String[i] - 'a'] == NULL)
+        if(String[i] >= 'a' && String[i] <= 'z')
+            Insert_num = String[i] - 'a';
+        else if(String[i] >= 'A' && String[i] <= 'Z')
+            Insert_num = String[i] - 'A' + 26;
+        else if(String[i] == 39)
+            Insert_num = 43;
+
+        if(tmp->Child[Insert_num] == NULL)
         {
             NewNode = TAllocateNode(String[i]);
-            tmp->Child[String[i] - 'a'] = NewNode;
+            tmp->Child[Insert_num] = NewNode;
             NewNode->Parent = tmp;
             EnQueue(&TNode_Queue,NewNode);
         }
         else
-            EnQueue(&TNode_Queue,tmp->Child[String[i] - 'a']);
+            EnQueue(&TNode_Queue,tmp->Child[Insert_num]);
+        
         i++;
         if('\0' == String[i])
         {
-            tmp->Child[String[i - 1] - 'a']->num++;
+            tmp->Child[Insert_num]->num++;
             break;
         }
     }
@@ -236,6 +245,47 @@ void Merge_Vocabulary_Result(Vocabulary_info *Vocabulary1, Vocabulary_info *Voca
         strcpy(Vocabulary1->Min_repetition_vocabulary,Vocabulary2->Min_repetition_vocabulary);
     }
     Vocabulary1->Average_repetition_num = (float)Vocabulary1->Sum / Vocabulary1->Kind_vocabulary_num;
+}
+
+void Merge_Vocabulary_Tree(PtrTNode Root1, PtrTNode Root2)
+{
+    Tree_Queue TNode_Queue1,TNode_Queue2;
+    PtrTNode tmp1,tmp2;
+    PtrTNode NewNode;
+    int i;
+
+    if(NULL == Root1 || NULL == Root2)
+        exit(0);
+    InitQueue(&TNode_Queue1);
+    InitQueue(&TNode_Queue2);
+    EnQueue(&TNode_Queue1,Root1);
+    EnQueue(&TNode_Queue2,Root2);
+
+    while(TNode_Queue1.head != TNode_Queue1.tail)
+    {
+        tmp1 = DeQueue(&TNode_Queue1);
+        tmp2 = DeQueue(&TNode_Queue2);
+        for(i = 0; i < Alphabet_num; i++)
+        {
+            if(tmp1->Child[i] == NULL && tmp2->Child[i] != NULL)
+            {
+                NewNode = TAllocateNode(tmp2->Child[i]->Alphabet);
+                NewNode->num = tmp2->Child[i]->num;
+                tmp1->Child[i] = NewNode;
+                NewNode->Parent = tmp1;
+                EnQueue(&TNode_Queue1,NewNode);
+                EnQueue(&TNode_Queue2,tmp2->Child[i]);
+            }
+            else if(tmp1->Child[i] != NULL && tmp2->Child[i] != NULL)
+            {
+                tmp1->Child[i]->num += tmp2->Child[i]->num;
+                EnQueue(&TNode_Queue1,tmp1->Child[i]);
+                EnQueue(&TNode_Queue2,tmp2->Child[i]);
+            }
+        }
+    }
+    DeleteQueue(&TNode_Queue1);
+    DeleteQueue(&TNode_Queue2);
 }
 
 void Vocabulary_Info_Result_Init(Vocabulary_info *Vocabulary, int num)
