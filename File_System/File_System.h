@@ -1,6 +1,7 @@
 #ifndef _FILE_SYSTEM_H
 #define _FILE_SYSTEM_H
 #include "apue.h"
+#define DEBUG 0
 
 #define TYPE_REG 1
 #define TYPE_DIR 2
@@ -66,6 +67,7 @@ typedef struct Mem_INode_Struct{
     int File_Disk_Address[13];
     struct Mem_INode_Struct *Next;
     struct Mem_INode_Struct *Next_Free;
+    struct Mem_INode_Struct *Prior_Free;
 }Mem_Inode, *Mem_Inode_P;
 
 typedef struct Dirent_Item_Struct{
@@ -127,15 +129,25 @@ int Get_Path_Len(char *Path_Name);
 int Get_Path_Inode(char *Path_Name, Mem_Inode_P *Opendir_Inode_Info);
 int Delete_Dirent_Item(Mem_Inode_P Dir_Inode_Info, Dirent_Item Dirent_Item_S);
 void Remove_File_Name(char *Path_Name, char *File_Name);
+int Inode_To_Name(int Inode_Num, char *Name);
 
 
 int Open_File_System(char *Path);
 int Close_File_System(void);
+void Get_Current_Name(char *Current_Dirent_Name);
 
 int Opendir_S(char *Path_Name, Mem_Inode_P *mem_Inode_Info);
 int Readir_S(Mem_Inode_P Mem_Inode_Info, Dirent_Item_P Dirent_Item_P, int Dirent_Item_Num);
 int Creat_S(char *Path_Name);
+int Mkdir_S(char *Path_Name);
+int Open_S(char *Path_Name, Mem_Inode_P *mem_Inode_Info);
+void Close_s(Mem_Inode_P Mem_Inode_Info);
+int Write_S(Mem_Inode_P Mem_Inode_Info, char *Str_Buf, int Write_Num);
+int Read_S(Mem_Inode_P Mem_Inode_Info, char *Str_Buf, int Read_Num);
 int Unlink_S(char *Path_Name);
+int File_Stat(char *Path_Name);
 int ls(char cmd, char *Path_Name);
+int Cd_S(char *Path_Name);
+
 
 #endif

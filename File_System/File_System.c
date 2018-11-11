@@ -3,7 +3,7 @@
 
 static FILE *File_System_fp;
 static Surper_Block Surper_Block_Info;
-static Mem_Inode_P Mem_Inode_head;
+static Mem_Inode_P Mem_Inode_head, Mem_Inode_Tail;
 static int Indirect_Block_Quantity = BLOCK_SIZE / sizeof(int);
 static int Current_Dirent_Inode_Num;
 
@@ -615,8 +615,12 @@ Mem_Inode_P Iget(int Inode_Num)
         {
             if(tmp->Next->File_Open_Link == 0) //如果该结点在空闲内存结点链表上，要从空闲内存链表中移除
             {
+                tmp->Next->Prior_Free->Next_Free = tmp->Next->Next_Free;
+                tmp->Next->Next_Free = NULL;
+                /*
                 tmp->Next_Free = tmp->Next->Next_Free;
                 tmp->Next->Next_Free = NULL;
+                */
             }
             tmp->Next->File_Open_Link++;
             return tmp->Next;
@@ -627,6 +631,7 @@ Mem_Inode_P Iget(int Inode_Num)
         return NULL;
     tmp = Mem_Inode_head->Next_Free;
     Mem_Inode_head->Next_Free = tmp->Next_Free;
+    tmp->Next_Free->Prior_Free = Mem_Inode_head;
     tmp->Next_Free = NULL;
 
     Read_Inode(Inode_Num,tmp);
@@ -745,8 +750,14 @@ void Iput(Mem_Inode_P Mem_Inode_Info)
             Mem_Inode_Info->Inode_Num = -1; //该内存结点之后只能在空闲内存结点中找到
         }
         Refresh_Inode(Mem_Inode_Info);
+        //放入空闲内存结点表尾部
+        Mem_Inode_Tail->Next_Free = Mem_Inode_Info;
+        Mem_Inode_Info->Prior_Free = Mem_Inode_Tail;
+        Mem_Inode_Tail = Mem_Inode_Info;
+        /*
         Mem_Inode_Info->Next_Free = Mem_Inode_head->Next_Free;
         Mem_Inode_head->Next_Free = Mem_Inode_Info;
+        */
     }
 }
 
@@ -768,10 +779,12 @@ int Creat_Mem_Inode_Table(void)
             return 1;
         tmp->Next->Inode_Num = -1;
         tmp->Next_Free = tmp->Next;
+        tmp->Next_Free->Prior_Free = tmp;
         tmp = tmp->Next;
     }
     tmp->Next = NULL;
     tmp->Next_Free = NULL;
+    Mem_Inode_Tail = tmp;
 
     return 0;
 }
@@ -1009,7 +1022,8 @@ int Write_Dirent_Item(Mem_Inode_P Mem_Inode_Num, Dirent_Item Dirent_Item_S)
     if(Dirent_Item_Address >= Mem_Inode_Num->File_Size)
     {
         Mem_Inode_Num->File_Size += Dirent_Item_Size;
-        Mem_Inode_Num->Modified_File = True;
+        Mem_Inode_Num->Modified_File = False;
+        Mem_Inode_Num->Modified_Inode = True;
     }
     
     return 0;
@@ -1034,7 +1048,7 @@ int Creat_Root_Dirent(void)
     Mem_Inode_Num->Modified_Inode = True;
     Mem_Inode_Num->File_Type = TYPE_DIR;
     Mem_Inode_Num->File_Name_Link = 1;
-    Mem_Inode_Num->File_Size = 0;
+    Mem_Inode_Num->File_Size = sizeof(Dirent_Item) * 2;;
 
     for(i = 0; i < 13; i++)
         Mem_Inode_Num->File_Disk_Address[i] = INDEX_BLOCK_FREE;
@@ -1057,6 +1071,8 @@ int Creat_Root_Dirent(void)
         return 1;
     if(Refresh_Surper_Block() != 0)
         return 1;
+
+    Mem_Inode_Num->Modified_File = False;
     Iput(Mem_Inode_Num);
     return 0;
 }
@@ -1136,12 +1152,13 @@ int Get_Path_Inode(char *Path_Name, Mem_Inode_P *Opendir_Inode_Info)
     if(Path_Name[0] == '/')
     {
         *Opendir_Inode_Info = Iget(Surper_Block_Info.Dirent_Root_Inode_Num);
-        
         order = 1;
     }
     else
     {
         *Opendir_Inode_Info = Iget(Current_Dirent_Inode_Num);
+        if(Path_Name[0] == '\0')
+            return 0;
         order = 0;
     }
     Path_Len--;
@@ -1184,7 +1201,7 @@ int Get_Path_Inode(char *Path_Name, Mem_Inode_P *Opendir_Inode_Info)
 
 int Opendir_S(char *Path_Name, Mem_Inode_P *mem_Inode_Info)
 {
-    int i = 0,ret;
+    int ret;
 
     if((ret = Get_Path_Inode(Path_Name,mem_Inode_Info)) != 0)
     {
@@ -1232,6 +1249,7 @@ int Delete_Dirent_Item(Mem_Inode_P Dir_Inode_Info, Dirent_Item Dirent_Item_S)
     return 0;
 }
 
+//分离出文件夹路径和文件名
 void Remove_File_Name(char *Path_Name, char *File_Name)
 {
     int Path_Len,i;
@@ -1269,7 +1287,7 @@ int Creat_S(char *Path_Name)
     while(Readir_S(Dir_Inode_Info, &Dirent_Item_S,i) == 0)
     {
         if(strcmp(Dirent_Item_S.Name, File_Name) == 0)
-            return 2;
+            return 2; //重名
         i++;
     }
 
@@ -1302,9 +1320,11 @@ int Creat_S(char *Path_Name)
         return 4;//更新超级快失败
     Iput(Mem_Inode_Num);
     Iput(Dir_Inode_Info);
-    
+
     return 0;
 }
+
+
 
 int Unlink_S(char *Path_Name)
 {
@@ -1315,11 +1335,12 @@ int Unlink_S(char *Path_Name)
     Mem_Inode_P Dir_Inode_Info;
     Dirent_Item Dirent_Item_S;
 
-    strcpy(Dirent_Name,Path_Name);
+    strcpy(Dirent_Name,Path_Name);//传入参数可能直接就是一个字符串，就不能再作为参数向下传递
+    
     Remove_File_Name(Dirent_Name,File_Name);
 
     if(Opendir_S(Dirent_Name, &Dir_Inode_Info) != 0)
-        return 1; //打开目录失败
+        return 2; //打开目录失败
 
     while(Readir_S(Dir_Inode_Info, &Dirent_Item_S,i) == 0)
     {
@@ -1347,13 +1368,23 @@ int ls(char cmd, char *Path_Name)
     char Str_Space = ' ';
     Bool First_Sta = True;
 
-    if(Opendir_S(Path_Name, &Mem_Inode_Info) != 0)
+    if(Path_Name != NULL)
+    {
+        if(Opendir_S(Path_Name, &Mem_Inode_Info) != 0)
         return 2;
-    if(strcmp(Path_Name, "/") == 0)
-        strcpy(Dirent_Name,"Root\0");
+        if(strcmp(Path_Name, "/") == 0)
+            strcpy(Dirent_Name,"Root\0");
+        else
+            strcpy(Dirent_Name,Path_Name);
+    }
     else
-        strcpy(Dirent_Name,Path_Name);
-    printf("Current Dirent: %s\n",Dirent_Name);
+    {
+        Mem_Inode_Info = Iget(Current_Dirent_Inode_Num);
+        Inode_To_Name(Current_Dirent_Inode_Num,Dirent_Name);
+    }
+#if DEBUG == 1
+    printf("\nDisplay Dirent: %s\n",Dirent_Name);
+#endif
     while(Readir_S(Mem_Inode_Info, &Dirent_Item_S,i) == 0)
     {
         switch(cmd)
@@ -1387,6 +1418,341 @@ int ls(char cmd, char *Path_Name)
         }
         i++;
     }
+    printf("\n");
     Iput(Mem_Inode_Info);
     return 0;
+}
+
+int Open_S(char *Path_Name, Mem_Inode_P *mem_Inode_Info)
+{
+    int ret;
+
+    if((ret = Get_Path_Inode(Path_Name,mem_Inode_Info)) != 0)
+    {
+        if(ret == 1)
+            printf("Path Name Not Exit!\n");
+        else if(ret == 2)
+            printf("Path Name is Wrong!\n");
+        return 1;
+    }
+    if((*mem_Inode_Info)->File_Type != TYPE_REG)
+    {
+        printf("Path Name Is Not File\n");
+        return 2;
+    }
+    return 0;
+}
+
+int File_Stat(char *Path_Name)
+{
+    Mem_Inode_P Mem_Inode_Info;
+    Open_S(Path_Name,&Mem_Inode_Info);
+
+    printf("\nName: %s\nSize: %u\nType: %d\nNum: %d\nLink:%d\nModifie Time: %s\nCreat Time: %s\n", Path_Name,Mem_Inode_Info->File_Size,Mem_Inode_Info->File_Type,Mem_Inode_Info->Inode_Num,Mem_Inode_Info->File_Name_Link
+    ,Mem_Inode_Info->File_Modifie_Time,Mem_Inode_Info->File_Creat_Time);
+}
+
+int Write_S(Mem_Inode_P Mem_Inode_Info, char *Str_Buf, int Write_Num)
+{
+    int i;
+    int Offset,Useful_Size;
+    int Write_Address;
+    int Enable_Write_Bytes,Reset_Write_Bytes = Write_Num;
+    Bool END = False;
+    char Str_Buf_Tmp[BLOCK_SIZE];
+    int Write_Num_Sum = 0;
+    char Time_Buf[30];
+
+    Write_Address = Mem_Inode_Info->File_Size;
+    File_Bmap(Write_Address,Mem_Inode_Info,&Offset,&Useful_Size,True);
+    fseek(File_System_fp,Offset,SEEK_SET);
+
+    for(i = 0; i < Reset_Write_Bytes; i++)
+        Str_Buf_Tmp[i] = Str_Buf[i];
+
+    while(1)
+    {
+        if(Useful_Size >= Reset_Write_Bytes)
+        {
+            Enable_Write_Bytes = Reset_Write_Bytes;
+            END = True;
+        }
+        else
+        {
+            Enable_Write_Bytes = Useful_Size;
+            Reset_Write_Bytes  = Reset_Write_Bytes - Useful_Size;
+        }
+        
+        if(fwrite(Str_Buf_Tmp, sizeof(char), Enable_Write_Bytes, File_System_fp) != Enable_Write_Bytes)
+            return 0;
+        Write_Num_Sum+=Enable_Write_Bytes;
+        if(END == True)
+            break;
+        else
+        {
+            for(i = 0; i < Reset_Write_Bytes; i++)
+                Str_Buf_Tmp[i] = Str_Buf[Enable_Write_Bytes+i];
+        }
+        Write_Address+=Enable_Write_Bytes;
+        File_Bmap(Write_Address,Mem_Inode_Info,&Offset,&Useful_Size,True);
+        fseek(File_System_fp,Offset,SEEK_SET);
+
+    }
+    if((Write_Address + Enable_Write_Bytes) >= Mem_Inode_Info->File_Size)
+        Mem_Inode_Info->File_Size = Write_Address + Enable_Write_Bytes;
+
+    Mem_Inode_Info->Modified_File = True;
+    Get_Time(Time_Buf);
+    strcpy(Mem_Inode_Info->File_Modifie_Time,Time_Buf);
+    strcpy(Mem_Inode_Info->Inode_Modifie_Time,Time_Buf);
+    Mem_Inode_Info->Modified_Inode = True;
+    return Write_Num_Sum;
+}
+
+int Read_S(Mem_Inode_P Mem_Inode_Info, char *Str_Buf, int Read_Num)
+{
+    int i;
+    int Offset,Useful_Size;
+    int Read_Address;
+    int Enable_Read_Bytes,Reset_Read_Bytes = Read_Num;
+    Bool END = False;
+    char Str_Buf_Tmp[BLOCK_SIZE];
+    int Read_Num_Sum = 0;
+    char Time_Buf[30];
+    
+    Read_Address = 0;
+    if(File_Bmap(Read_Address,Mem_Inode_Info,&Offset,&Useful_Size,False) != 0)
+    {
+        printf("Read File Fail!\n");
+        return 0;
+    }
+    fseek(File_System_fp,Offset,SEEK_SET);
+    while(1)
+    {
+        if(Read_Address + Reset_Read_Bytes > Mem_Inode_Info->File_Size)
+            Reset_Read_Bytes = Mem_Inode_Info->File_Size - Read_Address;
+        if(Useful_Size >= Reset_Read_Bytes)
+        {
+            Enable_Read_Bytes = Reset_Read_Bytes;
+            END = True;
+        }
+        else
+        {
+            Enable_Read_Bytes = Useful_Size;
+            Reset_Read_Bytes  = Reset_Read_Bytes - Useful_Size;
+        }
+        if(fread(Str_Buf_Tmp, sizeof(char), Enable_Read_Bytes, File_System_fp) != Enable_Read_Bytes)
+            return 0;
+        for(i = Read_Num_Sum; i < Enable_Read_Bytes; i++)
+            Str_Buf[i] = Str_Buf_Tmp[i - Read_Num_Sum];
+        Read_Num_Sum+=Enable_Read_Bytes;
+        if(END == True)
+            break;
+        Read_Address+=Enable_Read_Bytes;
+        File_Bmap(Read_Address,Mem_Inode_Info,&Offset,&Useful_Size,True);
+        fseek(File_System_fp,Offset,SEEK_SET);
+    }
+    Get_Time(Time_Buf);
+    strcpy(Mem_Inode_Info->File_Access_Time,Time_Buf);
+    strcpy(Mem_Inode_Info->Inode_Modifie_Time,Time_Buf);
+    Mem_Inode_Info->Modified_Inode = True;
+
+    return Read_Num_Sum;
+}
+
+void Close_s(Mem_Inode_P Mem_Inode_Info)
+{
+    Iput(Mem_Inode_Info);
+}
+
+int Mkdir_S(char *Path_Name)
+{
+    char Time_Buf[30];
+    int i = 2;
+    char File_Name[NAME_MAX_LENGTH];
+    char Dirent_Name[NAME_MAX_LENGTH];
+    Mem_Inode_P Mem_Inode_Num;
+    Mem_Inode_P Dir_Inode_Info;
+    Dirent_Item Dirent_Item_S[2],Dirent_Item_S_Tmp;
+
+    strcpy(Dirent_Name,Path_Name);
+    Remove_File_Name(Dirent_Name,File_Name);
+
+    if(Opendir_S(Dirent_Name, &Dir_Inode_Info) != 0)
+        return 1; //打开目录失败
+    
+    while(Readir_S(Dir_Inode_Info, &Dirent_Item_S_Tmp,i) == 0)
+    {
+        if(strcmp(Dirent_Item_S_Tmp.Name, File_Name) == 0)
+            return 2; //存在相同名字
+        i++;
+    }
+
+    Mem_Inode_Num = Ialloc();
+    Get_Time(Time_Buf);
+    strcpy(Mem_Inode_Num->File_Creat_Time,Time_Buf);
+    strcpy(Mem_Inode_Num->File_Access_Time,Time_Buf);
+    strcpy(Mem_Inode_Num->File_Modifie_Time,Time_Buf);
+    strcpy(Mem_Inode_Num->Inode_Modifie_Time,Time_Buf);
+    Mem_Inode_Num->Modified_Inode = True;
+    Mem_Inode_Num->File_Type = TYPE_DIR;
+    Mem_Inode_Num->File_Name_Link = 1;
+    Mem_Inode_Num->File_Size = sizeof(Dirent_Item) * 2;
+
+    for(i = 0; i < 13; i++)
+        Mem_Inode_Num->File_Disk_Address[i] = INDEX_BLOCK_FREE;
+
+    Dirent_Item_S_Tmp.Inode_Num = Mem_Inode_Num->Inode_Num;
+    Dirent_Item_S_Tmp.Num = Dir_Inode_Info->File_Size / sizeof(Dirent_Item);
+    strcpy(Dirent_Item_S_Tmp.Name,File_Name);
+
+    if(Write_Dirent_Item(Dir_Inode_Info, Dirent_Item_S_Tmp) != 0)
+        return 3;//写入目录失败
+    Dir_Inode_Info->Modified_Inode = True;
+    
+    strcpy(Dirent_Item_S[0].Name,".");
+    Dirent_Item_S[0].Inode_Num = Mem_Inode_Num->Inode_Num;
+    Dirent_Item_S[0].Num = 0;
+    strcpy(Dirent_Item_S[1].Name,"..");
+    Dirent_Item_S[1].Inode_Num = Dir_Inode_Info->Inode_Num;
+    Dirent_Item_S[1].Num = 1;
+
+    Mem_Inode_Num->Modified_File = True;
+    if(Write_Dirent_Item(Mem_Inode_Num, Dirent_Item_S[0]) != 0)
+        return 3;
+    if(Write_Dirent_Item(Mem_Inode_Num, Dirent_Item_S[1]) != 0)
+        return 3;
+
+    Mem_Inode_Num->Modified_File = False;
+
+    if(Refresh_Inode(Dir_Inode_Info) != 0)
+        return 4;//更新节点失败
+    if(Refresh_Inode(Mem_Inode_Num) != 0)
+        return 4;//更新节点失败
+    if(Refresh_Surper_Block() != 0)
+        return 4;//更新超级快失败
+    Iput(Mem_Inode_Num);
+    Iput(Dir_Inode_Info);
+    
+    return 0;
+}
+
+
+int Inode_To_Name(int Inode_Num, char *Name)
+{
+    Mem_Inode_P Dir_Inode_Info;
+    Dirent_Item Dirent_Item_S;
+    int Inode_Num_Tmp;
+    int i = 2;
+
+    if(Inode_Num == 0)
+    {
+        strcpy(Name,"Root");
+        return 0;
+    }
+    Dir_Inode_Info = Iget(Inode_Num);
+    if(Readir_S(Dir_Inode_Info, &Dirent_Item_S,1) != 0)
+        return 1;
+    Iput(Dir_Inode_Info);
+    Inode_Num_Tmp = Dirent_Item_S.Inode_Num;
+    Dir_Inode_Info = Iget(Inode_Num_Tmp);
+    while(Readir_S(Dir_Inode_Info, &Dirent_Item_S,i) == 0)
+    {
+        if(Dirent_Item_S.Inode_Num == Inode_Num)
+        {
+            strcpy(Name,Dirent_Item_S.Name);
+            break;
+        }
+        i++;
+    }
+    return 0;
+}
+
+int Cd_S(char *Path_Name)
+{
+    Mem_Inode_P Dir_Inode_Info;
+    Dirent_Item Dirent_Item_S;
+    int Inode_Num_Tmp;
+    int i = 2;
+    char Current_Dirent_Name[NAME_MAX_LENGTH];
+
+    if(strcmp(Path_Name,".") == 0)
+    {
+        if(Current_Dirent_Inode_Num == 0)
+        {
+            strcpy(Current_Dirent_Name,"Root\n");
+#if DEBUG == 1
+            printf("Current Dirent: %s\n",Current_Dirent_Name);
+#endif
+            return 0;
+        }
+        Dir_Inode_Info = Iget(Current_Dirent_Inode_Num);
+        if(Readir_S(Dir_Inode_Info, &Dirent_Item_S,1) != 0)
+            return 1;
+        Iput(Dir_Inode_Info);
+        Inode_Num_Tmp = Dirent_Item_S.Inode_Num;
+        Dir_Inode_Info = Iget(Inode_Num_Tmp);
+        while(Readir_S(Dir_Inode_Info, &Dirent_Item_S,i) == 0)
+        {
+            if(Dirent_Item_S.Inode_Num == Current_Dirent_Inode_Num)
+            {
+                strcpy(Current_Dirent_Name,Dirent_Item_S.Name);
+                break;
+            }
+            i++;
+        }
+    }
+    else if(strcmp(Path_Name,"..") == 0)
+    {
+        Dir_Inode_Info = Iget(Current_Dirent_Inode_Num);
+        if(Readir_S(Dir_Inode_Info, &Dirent_Item_S,1) != 0)
+            return 1;
+        Current_Dirent_Inode_Num = Dirent_Item_S.Inode_Num;
+        if(Current_Dirent_Inode_Num == Surper_Block_Info.Dirent_Root_Inode_Num)
+            strcpy(Current_Dirent_Name,"Root\n");
+        Iput(Dir_Inode_Info);
+
+        Dir_Inode_Info = Iget(Current_Dirent_Inode_Num);
+        if(Readir_S(Dir_Inode_Info, &Dirent_Item_S,1) != 0)
+            return 1;
+        Inode_Num_Tmp = Dirent_Item_S.Inode_Num;
+        Iput(Dir_Inode_Info);
+
+        Dir_Inode_Info = Iget(Inode_Num_Tmp);
+
+        while(Readir_S(Dir_Inode_Info, &Dirent_Item_S,i) == 0)
+        {
+            if(Dirent_Item_S.Inode_Num == Current_Dirent_Inode_Num)
+            {
+                strcpy(Current_Dirent_Name,Dirent_Item_S.Name);
+                break;
+            }
+            i++;
+        }
+    }
+    else if(strcmp(Path_Name,"...") == 0)
+    {
+        Current_Dirent_Inode_Num = Surper_Block_Info.Dirent_Root_Inode_Num;
+        strcpy(Current_Dirent_Name,"Root\n");
+#if DEBUG == 1
+        printf("Current Dirent: %s\n",Current_Dirent_Name);
+#endif
+        return 0;
+    }
+    else
+    {
+        if(Opendir_S(Path_Name, &Dir_Inode_Info) != 0)
+            return 1; //打开目录失败
+        Current_Dirent_Inode_Num = Dir_Inode_Info->Inode_Num;
+        strcpy(Current_Dirent_Name,Path_Name);
+    }
+    Iput(Dir_Inode_Info);
+#if DEBUG == 1
+    printf("Current Dirent: %s\n",Current_Dirent_Name);
+#endif
+}
+
+void Get_Current_Name(char *Current_Dirent_Name)
+{
+    Inode_To_Name(Current_Dirent_Inode_Num, Current_Dirent_Name);
 }
