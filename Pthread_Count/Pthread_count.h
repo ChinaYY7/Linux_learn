@@ -3,7 +3,7 @@
 #include "apue.h"
 #include "Tree.h"
 
-#define Thread_num 4
+#define Thread_num 3
 #define File_num 10
 #define Str_count 20000
 #define STR_MAX 20

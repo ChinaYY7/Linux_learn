@@ -1,3 +1,4 @@
+//"c": "cd $dir && gcc -g $fileName File_System.c -o ../../bin/$fileNameWithoutExt.out && cd $dir/../../bin && ./$fileNameWithoutExt.out",
 #include "apue.h"
 #include "File_System.h"
 #define Path "/mnt/f/Linux_code/File_System/File_System.Fsys"
@@ -110,7 +111,7 @@ int main(void)
                 printf("Input Corret param\n"); 
         }
 
-        else if(strcmp(CONTROL[0],"creat") == 0)
+        else if(strcmp(CONTROL[0],"create") == 0)
         {
             if((CONTROL[1][0] == '\0') && (CONTROL[2][0] != '\0'))
             {
