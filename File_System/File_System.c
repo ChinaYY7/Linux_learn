@@ -854,7 +854,7 @@ int Free_Block_Table_Init(void)
             if(Block_Data[i] > Surper_Block_Info.Free_Block_Num)//超过最大空闲块数量
                 break;
         }
-        if(Write_Block_Int(j-1,Block_Data,i) != 1)
+        if(Write_Block_Int(j-1,Block_Data,i) != 0)
             return 1;
         printf("%.2lf%%....\n",((float)(j-1) / 1045503) * 100);
         
