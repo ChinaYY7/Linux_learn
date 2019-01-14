@@ -134,7 +134,7 @@ void *Memory_Malloc(Memory_Pool_P Pool, Size_V Need_Size)
 	return Chunk_Table_Tmp->Start_Block_P;
 }
 //释放回内存池
-void Memory_Free(Memory_Pool_P Pool, void *Memory_P)
+void Memory_Free(Memory_Pool_P Pool, void **Memory_P)
 {
 	Memory_Chunk_Table_P Chunk_Table_Tmp;
 	Memory_Map_Table_P Map_Table_Tmp;
@@ -142,7 +142,7 @@ void Memory_Free(Memory_Pool_P Pool, void *Memory_P)
 	int block_start_index = 0;
 	int block_cnt = 0;
 
-	if (Memory_P == NULL) {
+	if (*Memory_P == NULL) {
 		printf("memory_free(): memory is NULL\n");
 		return;
 	}
@@ -154,7 +154,7 @@ void Memory_Free(Memory_Pool_P Pool, void *Memory_P)
 	for (i = 0; i < Pool->Block_Num; i++) 
 	{
 		Chunk_Table_Tmp = (Memory_Chunk_Table_P)(Pool->Chunk_Table + i * sizeof(Memory_Chunk_Table));
-		if (Chunk_Table_Tmp->Start_Block_P == Memory_P) 
+		if (Chunk_Table_Tmp->Start_Block_P == *Memory_P) 
 			break;
 	}
     for (i = Chunk_Table_Tmp->Start_Block_Index; i < Chunk_Table_Tmp->Start_Block_Index + Chunk_Table_Tmp->Block_Num; i++) 
@@ -166,6 +166,7 @@ void Memory_Free(Memory_Pool_P Pool, void *Memory_P)
 	Pool->Used_Size-=Chunk_Table_Tmp->Block_Num * Pool->Block_Size;
 	Pool->Chunk_Num-=1;
 	Pool->Used_Block_Num -= Chunk_Table_Tmp->Block_Num;
+	*Memory_P = NULL;
 	printf("Block free: (start: %d, end: %d, cnt: %d)\n", Chunk_Table_Tmp->Start_Block_Index, Chunk_Table_Tmp->Start_Block_Index + Chunk_Table_Tmp->Block_Num - 1, Chunk_Table_Tmp->Block_Num);
 }
 //释放内存池分配的内存

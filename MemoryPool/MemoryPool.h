@@ -45,7 +45,7 @@ typedef struct Struct_Memory_Pool
 
 Memory_Pool_P Memory_Pool_Init(Size_V Need_Size);
 void *Memory_Malloc(Memory_Pool_P Pool, Size_V Need_Size);
-void Memory_Free(Memory_Pool_P Pool, void *Memory_P);
+void Memory_Free(Memory_Pool_P Pool, void **Memory_P);
 void Memory_Pool_Destroy(Memory_Pool_P Pool);
 void Get_Memory_Info(Memory_Pool_P Pool);
 
