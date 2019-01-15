@@ -23,6 +23,8 @@
 #define FILE_MODE (S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)
 #define DIR_MODE (FILE_MODE | S_IXUSR | S_IXGRP | S_IXOTH)
 
+#define BUFFIZE 4096
+
 
 typedef enum BoolType{
     False = 0,
