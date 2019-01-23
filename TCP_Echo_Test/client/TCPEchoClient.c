@@ -5,14 +5,38 @@
 #include "Deal_Error.h"
 #include "TCPClientUtility.h"
 
+#define SERVER_LEN 100
+#define SERVICE_LEN 100
+#define CONFIG_PATH "./config/connect.config"
+#define DELIM " "
+
 int main(int argc, char *argv[])
 {
-    if(argc < 2 || argc > 3)
+    FILE *Config_file_fp;
+    char addrBuffer[SERVER_LEN];
+    char server[SERVER_LEN], service[SERVICE_LEN];
+    char *token;
+
+    if(argc ==3)
+    {
+        strcpy(server, argv[1]);
+        strcpy(service, argv[2]);
+    }
+    else if(argc == 1)
+    {
+        if((Config_file_fp = fopen(CONFIG_PATH,"r")) == NULL)
+            Deal_User_Error("fopen()", "connect.config not exit!");
+
+        fgets(addrBuffer, SERVER_LEN, Config_file_fp);
+        token = strtok(addrBuffer, DELIM);
+        strcpy(server,token);
+
+        token = strtok(NULL, DELIM);
+        strcpy(service,token);
+    }
+    else
         Deal_User_Error("wrong arguments","<Server Address> <Server Port>");
     
-    char *server = argv[1];
-    char *service = (argc == 3) ? argv[2] : "echo";
-
     int sock = SetupTCPClientSocket(server, service);
 
     if (sock < 0)
@@ -21,38 +45,25 @@ int main(int argc, char *argv[])
     char echoString[BUFFIZE];
     size_t echoStringLen;
     ssize_t numBytes;
-    unsigned int totalBytesRcvd = 0;
     char buffer[BUFFIZE];
 
     while(1)
     {
-        printf("\nPlease input sended string:");
+        printf("\nPlease input sended string:   ");
         fgets(echoString, BUFFIZE, stdin);
 
         echoStringLen = strlen(echoString);
-        numBytes = send(sock, echoString, echoStringLen, 0);
-        if(numBytes < 0)
-            Deal_System_Error("send faild");
-        else if (numBytes != echoStringLen)
-            Deal_User_Error("send","sent unexpected number of bytes");
-        printf("%lu bytes have been sent\n", numBytes);
 
-        printf("Received from sever:");
-        totalBytesRcvd = 0;
-        while (totalBytesRcvd < echoStringLen)
-        {
-            numBytes = recv(sock, buffer, BUFFIZE - 1, 0);
-            if(numBytes < 0)
-                Deal_System_Error("recv() faild\n");
-            else if(numBytes == 0)
-                Deal_User_Error("recv", "connection closed prematurely");
-            totalBytesRcvd += numBytes;
-            buffer[numBytes] = '\0';
-            fputs(buffer,stdout);
-        }
-        printf("%u bytes have been received\n", totalBytesRcvd);
-        fputc('\n',stdout);
+        numBytes = TCP_nSend(sock, echoString, echoStringLen);
+        if(numBytes < 0)
+            exit(Exit_value);
+        printf("send %lu bytes\n", numBytes);
+
+        numBytes = TCP_nReceive(sock, buffer, echoStringLen);
+        buffer[echoStringLen] = '\0';
+        printf("Received from sever(%lu bytes): %s\n", numBytes, buffer);
     }
+
     close(sock);
     return 0;
 } 

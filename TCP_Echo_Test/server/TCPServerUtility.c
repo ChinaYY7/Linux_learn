@@ -4,30 +4,6 @@
 #include <arpa/inet.h>
 #include "Deal_Error.h"
 #include "AddressUtility.h"
-void HandleTCPClient(int clntSocket)
-{
-    char buffer[BUFFIZE];
-    ssize_t numBytesRcved = 1;
-    ssize_t numBytesSent;
-    
-    while(numBytesRcved > 0)
-    {
-        numBytesRcved = recv(clntSocket, buffer, BUFFIZE - 1, 0);
-        if(numBytesRcved < 0)
-            Deal_System_Error("recv faild!");
-        printf("%ld bytes have been received\n", numBytesRcved);
-        buffer[numBytesRcved] = '\0';
-        printf("Recived from client: %s\n",buffer);
-
-        numBytesSent = send(clntSocket, buffer, numBytesRcved, 0);
-        if(numBytesSent < 0)
-            Deal_System_Error("send faild!");
-        else if(numBytesSent != numBytesRcved)
-            Deal_User_Error("send ","sent unexpected number of bytes");
-        fputc('\n',stdout);
-    }
-    close(clntSocket);
-}
 
 int SetupTCPServerSocket(const char *service)
 {
@@ -55,15 +31,11 @@ int SetupTCPServerSocket(const char *service)
         
         if((bind(servSock,addr->ai_addr,addr->ai_addrlen) == 0) && (listen(servSock, MAXPENDING) == 0))
         {
-            struct sockaddr_storage localAddr;
-            socklen_t addrSize = sizeof(localAddr);
-            if(getsockname(servSock, (struct sockaddr *)&localAddr,&addrSize) < 0)
-                Deal_System_Error("getsockname() faild!");
             fputs("Binding to ",stdout);
-            PrintSockAddress((struct sockaddr *)&localAddr, stdout);
+            PrintSockAddress(addr->ai_addr,stdout);
             break;
         }
-
+        
         close(servSock);
         servSock = -1;
     }
@@ -71,6 +43,16 @@ int SetupTCPServerSocket(const char *service)
     freeaddrinfo(servAddr);
 
     return servSock;
+}
+
+int Get_Sock_Name(int sock_fd)
+{
+    struct sockaddr_storage localAddr;
+    socklen_t addrSize = sizeof(localAddr);
+    if(getsockname(sock_fd, (struct sockaddr *)&localAddr,&addrSize) < 0)
+        Deal_System_Error("getsockname() faild!");
+
+    PrintSockAddress((struct sockaddr *)&localAddr, stdout);
 }
 
 int AcceptTCPConnection(int servSock)
@@ -82,7 +64,72 @@ int AcceptTCPConnection(int servSock)
     if(clntScok < 0)
         Deal_System_Error("accept() faild!");
     
-    fputs("Handling client ", stdout);
+    fputs("\nHandling client ", stdout);
     PrintSockAddress((struct sockaddr *)&clntAddr, stdout);
     return clntScok;
+}
+
+int TCP_nSend(int sock_fd, const void *buf, size_t buf_len)
+{
+    ssize_t Send_Bytes;
+
+    Send_Bytes = send(sock_fd, buf, buf_len, 0);
+    if(Send_Bytes < 0)
+        Deal_System_Error("send faild");
+    else if (Send_Bytes != buf_len)
+        Deal_User_Error("send","sent unexpected number of bytes");
+
+    return Send_Bytes;
+}
+
+int TCP_nReceive(int sock_fd, void *buf, size_t buf_len)
+{
+    ssize_t numBytes;
+    unsigned int totalBytesRcvd = 0;
+
+    if(buf_len == 0)
+    {
+        numBytes = recv(sock_fd, buf, BUFFIZE - 1, 0);
+        if(numBytes < 0)
+            Deal_System_Error("recv() faild\n");
+        else if(numBytes == 0)
+            printf("\nconnection closed prematurely\n");
+
+        return numBytes;
+    }
+    else
+    {
+        while(totalBytesRcvd < buf_len)
+        {
+            numBytes = recv(sock_fd, buf, BUFFIZE - 1, 0);
+            if(numBytes < 0)
+                Deal_System_Error("recv() faild\n");
+            else if(numBytes == 0)
+                Deal_User_Error("recv", "connection closed prematurely");
+            totalBytesRcvd += numBytes;
+        }
+
+        return totalBytesRcvd;
+    }   
+}
+
+void HandleTCPClient(int clntSocket)
+{
+    char buffer[BUFFIZE];
+    ssize_t numBytesRcved = 1;
+    ssize_t numBytesSent;
+    
+    while(numBytesRcved > 0)
+    {
+        numBytesRcved = TCP_nReceive(clntSocket, buffer, 0);
+        if(numBytesRcved != 0)
+        {
+            buffer[numBytesRcved - 1] = '\0';
+            printf("\nReceived from client(%lu bytes): %s\n", numBytesRcved, buffer);
+
+            numBytesSent = TCP_nSend(clntSocket, buffer, numBytesRcved);
+            printf("  send    to  client(%lu bytes): %s\n", numBytesSent, buffer);
+        }
+    }
+    close(clntSocket);
 }

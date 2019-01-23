@@ -1,5 +1,6 @@
 #include "TCPClientUtility.h"
 #include "Deal_Error.h"
+#include "AddressUtility.h" 
 
 int SetupTCPClientSocket(const char *host, const char *service)
 {
@@ -23,11 +24,70 @@ int SetupTCPClientSocket(const char *host, const char *service)
         if(sock < 0)
             continue;
         if(connect(sock, addr->ai_addr,addr->ai_addrlen) == 0)
+        {
+            printf("connect to ");
+            PrintSockAddress(addr->ai_addr,stdout);
             break;
+        }
+            
         close(sock);
         sock = -1;
     }
     
     freeaddrinfo(severAddr);
     return sock;
+}
+
+int Get_Sock_Name(int sock_fd)
+{
+    struct sockaddr_storage localAddr;
+    socklen_t addrSize = sizeof(localAddr);
+    if(getsockname(sock_fd, (struct sockaddr *)&localAddr,&addrSize) < 0)
+        Deal_System_Error("getsockname() faild!");
+
+    PrintSockAddress((struct sockaddr *)&localAddr, stdout);
+}
+
+int TCP_nSend(int sock_fd, const void *buf, size_t buf_len)
+{
+    ssize_t Send_Bytes;
+
+    Send_Bytes = send(sock_fd, buf, buf_len, 0);
+    if(Send_Bytes < 0)
+        Deal_System_Error("send faild");
+    else if (Send_Bytes != buf_len)
+        Deal_User_Error("send","sent unexpected number of bytes");
+
+    return Send_Bytes;
+}
+
+int TCP_nReceive(int sock_fd, void *buf, size_t buf_len)
+{
+    ssize_t numBytes;
+    unsigned int totalBytesRcvd = 0;
+
+    if(buf_len == 0)
+    {
+        numBytes = recv(sock_fd, buf, BUFFIZE - 1, 0);
+        if(numBytes < 0)
+            Deal_System_Error("recv() faild\n");
+        else if(numBytes == 0)
+            printf("\nconnection closed prematurely\n");
+        return numBytes;
+    }
+    else
+    {
+        while(totalBytesRcvd < buf_len)
+        {
+            numBytes = recv(sock_fd, buf, BUFFIZE - 1, 0);
+            if(numBytes < 0)
+                Deal_System_Error("recv() faild\n");
+            else if(numBytes == 0)
+                Deal_User_Error("recv", "connection closed prematurely");
+            
+            totalBytesRcvd += numBytes;
+        }
+
+        return totalBytesRcvd;
+    }   
 }
