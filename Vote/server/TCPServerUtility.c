@@ -128,6 +128,8 @@ void HandleTCPClient(int clntSocket)
     int msize;
     uint8_t inbuf[MAX_WIRE_SIZE];
     VoteInfo v;
+
+    printf("\n------------Process-----------\n");
     while((msize =  GetNextMsg(Channel, inbuf, MAX_WIRE_SIZE)) > 0)
     {
         //printf("inBuf: %s\n ",inbuf);
@@ -152,7 +154,10 @@ void HandleTCPClient(int clntSocket)
             if(PutMsg(outBuf,msize,Channel) < 0)
                 Deal_User_Error("PutMsg(outbuf)","faild !", ERROR_VALUE);
             else
+            {
+                printf("-------------END--------------\n");
                 printf("Processed %s for candidate %d;\nCurrent count is %lu\n",(v.isInquiry ? "inquiry" : "vote"), v.candidate, v.count);
+            }
 
             fflush(Channel);
         }

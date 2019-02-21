@@ -23,6 +23,7 @@ void PrintSockAddress(const struct sockaddr *address, FILE *stream)
             break;
         default:
             fputs("unknown type", stream);
+            return;
     }
 
     if(inet_ntop(address->sa_family,numericAddress,addrBuffer,sizeof(addrBuffer)) == NULL)

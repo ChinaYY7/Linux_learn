@@ -74,13 +74,15 @@ int main(int argc, char *argv[])
     vi.isResponse = False;
 
     uint8_t outbuf[MAX_WIRE_SIZE];
+    printf("\n------------Process-----------\n");
     size_t reqsize = Encode(&vi, outbuf, MAX_WIRE_SIZE);
 
-    printf("Sending %ld-byte %s for candidate %d ... \n", reqsize, (inq ? "inquiry" : "vote"), candidateID);
     //printf("outBuf: %s\n ",outbuf);
 
     if(PutMsg(outbuf,reqsize,str) < 0)
         Deal_User_Error("PutMsg(outbuf)","faild !", ERROR_VALUE);
+
+    printf("Sending %ld-byte %s for candidate %d ... \n", reqsize, (inq ? "inquiry" : "vote"), candidateID);
     
     uint8_t inbuf[MAX_CANDIDATE];
     
@@ -89,6 +91,7 @@ int main(int argc, char *argv[])
 
     if(Decode(&vi, inbuf, reqsize))
     {
+        printf("-------------END--------------\n");
         printf("Received:\n");
         if(vi.isResponse)
             printf("Response to ");
