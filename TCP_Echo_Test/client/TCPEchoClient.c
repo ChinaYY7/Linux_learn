@@ -25,7 +25,7 @@ int main(int argc, char *argv[])
     else if(argc == 1)
     {
         if((Config_file_fp = fopen(CONFIG_PATH,"r")) == NULL)
-            Deal_User_Error("fopen()", "connect.config not exit!");
+            Deal_User_Error("fopen()", "connect.config not exit!", ERROR_VALUE);
 
         fgets(addrBuffer, SERVER_LEN, Config_file_fp);
         token = strtok(addrBuffer, DELIM);
@@ -35,28 +35,28 @@ int main(int argc, char *argv[])
         strcpy(service,token);
     }
     else
-        Deal_User_Error("wrong arguments","<Server Address> <Server Port>");
+        Deal_User_Error("wrong arguments","<Server Address> <Server Port>",ERROR_VALUE);
     
     int sock = SetupTCPClientSocket(server, service);
 
     if (sock < 0)
-        Deal_User_Error("SetupTCPClientSocket() faild!", "Unable to connect");
+        Deal_User_Error("SetupTCPClientSocket() faild!", "Unable to connect",ERROR_VALUE);
 
-    char echoString[BUFFIZE];
+    char echoString[BUFFSIZE];
     size_t echoStringLen;
     ssize_t numBytes;
-    char buffer[BUFFIZE];
+    char buffer[BUFFSIZE];
 
     while(1)
     {
         printf("\nPlease input sended string:   ");
-        fgets(echoString, BUFFIZE, stdin);
+        fgets(echoString, BUFFSIZE, stdin);
 
         echoStringLen = strlen(echoString);
 
         numBytes = TCP_nSend(sock, echoString, echoStringLen);
         if(numBytes < 0)
-            exit(Exit_value);
+            exit(ERROR_VALUE);
         printf("send %lu bytes\n", numBytes);
 
         numBytes = TCP_nReceive(sock, buffer, echoStringLen);

@@ -19,7 +19,7 @@ int SetupTCPServerSocket(const char *service)
     int rtnVal = getaddrinfo(NULL, service, &addrCriteria, &servAddr);
     
     if(rtnVal != 0)
-        Deal_User_Error("getaddrinfo()", "faild");
+        Deal_User_Error("getaddrinfo()", "faild", ERROR_VALUE);
     
     int servSock = -1;
 
@@ -50,7 +50,7 @@ int Get_Sock_Name(int sock_fd)
     struct sockaddr_storage localAddr;
     socklen_t addrSize = sizeof(localAddr);
     if(getsockname(sock_fd, (struct sockaddr *)&localAddr,&addrSize) < 0)
-        Deal_System_Error("getsockname() faild!");
+        Deal_System_Error("getsockname() faild!",ERROR_VALUE);
 
     PrintSockAddress((struct sockaddr *)&localAddr, stdout);
 }
@@ -62,7 +62,7 @@ int AcceptTCPConnection(int servSock)
     int clntScok = accept(servSock, (struct sockaddr *)&clntAddr, &clntAddrLen);
     
     if(clntScok < 0)
-        Deal_System_Error("accept() faild!");
+        Deal_System_Error("accept() faild!",ERROR_VALUE);
     
     fputs("\nHandling client ", stdout);
     PrintSockAddress((struct sockaddr *)&clntAddr, stdout);
@@ -75,9 +75,9 @@ int TCP_nSend(int sock_fd, const void *buf, size_t buf_len)
 
     Send_Bytes = send(sock_fd, buf, buf_len, 0);
     if(Send_Bytes < 0)
-        Deal_System_Error("send faild");
+        Deal_System_Error("send faild",ERROR_VALUE);
     else if (Send_Bytes != buf_len)
-        Deal_User_Error("send","sent unexpected number of bytes");
+        Deal_User_Error("send","sent unexpected number of bytes", ERROR_VALUE);
 
     return Send_Bytes;
 }
@@ -89,9 +89,9 @@ int TCP_nReceive(int sock_fd, void *buf, size_t buf_len)
 
     if(buf_len == 0)
     {
-        numBytes = recv(sock_fd, buf, BUFFIZE - 1, 0);
+        numBytes = recv(sock_fd, buf, BUFFSIZE - 1, 0);
         if(numBytes < 0)
-            Deal_System_Error("recv() faild\n");
+            Deal_System_Error("recv() faild\n",ERROR_VALUE);
         else if(numBytes == 0)
             printf("\nconnection closed prematurely\n");
 
@@ -101,11 +101,11 @@ int TCP_nReceive(int sock_fd, void *buf, size_t buf_len)
     {
         while(totalBytesRcvd < buf_len)
         {
-            numBytes = recv(sock_fd, buf, BUFFIZE - 1, 0);
+            numBytes = recv(sock_fd, buf, BUFFSIZE - 1, 0);
             if(numBytes < 0)
-                Deal_System_Error("recv() faild\n");
+                Deal_System_Error("recv() faild\n",ERROR_VALUE);
             else if(numBytes == 0)
-                Deal_User_Error("recv", "connection closed prematurely");
+                Deal_User_Error("recv", "connection closed prematurely", ERROR_VALUE);
             totalBytesRcvd += numBytes;
         }
 
@@ -115,7 +115,7 @@ int TCP_nReceive(int sock_fd, void *buf, size_t buf_len)
 
 void HandleTCPClient(int clntSocket)
 {
-    char buffer[BUFFIZE];
+    char buffer[BUFFSIZE];
     ssize_t numBytesRcved = 1;
     ssize_t numBytesSent;
     
