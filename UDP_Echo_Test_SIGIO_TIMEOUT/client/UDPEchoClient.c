@@ -8,6 +8,13 @@
 #define CONFIG_PATH "./config/connect.config"
 #define DELIM " "
 
+#define MAXSTRIES 5
+#define TIMEOUT_SECS 2
+
+unsigned int tries = 0;
+
+void CatchAlarm(int ignored);
+
 int main(int argc, char *argv[])
 {
     FILE *Config_file_fp;
@@ -41,8 +48,19 @@ int main(int argc, char *argv[])
 
     if (sock < 0)
         Deal_User_Error("SetupUDPClientSocket() faild!", "Unable to connect", ERROR_VALUE);
+    
+    //---------------set signal handler for alarm signal-----------------------
+    struct sigaction handler;
+    handler.sa_handler = CatchAlarm;
+    if(sigfillset(&handler.sa_mask) < 0)
+        Deal_System_Error("sigfillset() faild", ERROR_VALUE);
+    handler.sa_flags = 0;
 
-    char echoString[MAXSTRLEN * 2];
+    if(sigaction(SIGALRM, &handler, 0) < 0)
+        Deal_System_Error("sigaction() faild for SIGALRM", ERROR_VALUE);
+    //-------------------------------------------------------------------------
+
+    char echoString[MAXSTRLEN * 2]; 
     size_t echoStringLen;
     ssize_t numBytes;
     char buffer[MAXSTRLEN + 1];
@@ -63,12 +81,34 @@ int main(int argc, char *argv[])
             Deal_System_Error("sendto() faild", ERROR_VALUE);
         else if (numBytes != echoStringLen)
             Deal_User_Error("sendto() error","sent unexpected number of bytes", ERROR_VALUE);
-        printf("send %lu bytes\n", numBytes);
+        printf("send %lu bytes, try time :%d\n", numBytes, tries + 1);
+
+        alarm(TIMEOUT_SECS);  //set alarm ,SIGALARM 将导致recvfrom()返回-1，并把errno设置为EINTR
+        tries = 0;
         
-        numBytes = recvfrom(sock, buffer, MAXSTRLEN, 0,(struct sockaddr *)&fromAddr, &fromAddrLen);
-        if(numBytes < 0)
-            Deal_System_Error("recvfrom() faild\n", ERROR_VALUE);
-        else if(numBytes != echoStringLen)
+        while((numBytes = recvfrom(sock, buffer, MAXSTRLEN, 0,(struct sockaddr *)&fromAddr, &fromAddrLen)) < 0)
+        {
+            if(errno == EINTR)
+            {
+                if(tries < MAXSTRIES)
+                {
+                    numBytes = sendto(sock, echoString, echoStringLen, 0, severAddr->ai_addr, severAddr->ai_addrlen);
+                    if(numBytes < 0)
+                        Deal_System_Error("sendto() faild", ERROR_VALUE);
+                    else if (numBytes != echoStringLen)
+                        Deal_User_Error("sendto() error","sent unexpected number of bytes", ERROR_VALUE);
+                    printf("send %lu bytes, try time :%d\n", numBytes, tries + 1);
+                    alarm(TIMEOUT_SECS); //重置alarm
+                }
+                else
+                    Deal_User_Error("No Response", "unable to communication with server",ERROR_VALUE);
+            }
+            else
+                Deal_System_Error("recvfrom() faild", ERROR_VALUE);
+        }
+        alarm(0); //cancel the timeout
+    
+        if(numBytes != echoStringLen)
             Deal_User_Error("recvfrom() error", "recevied unexpected number of bytes", ERROR_VALUE);
 
         if(!SockAddrsEqual(severAddr->ai_addr, (struct sockaddr *)&fromAddr))
@@ -83,3 +123,8 @@ int main(int argc, char *argv[])
     close(sock);
     return 0;
 } 
+
+void CatchAlarm(int ignored)
+{
+    tries+=1;
+}

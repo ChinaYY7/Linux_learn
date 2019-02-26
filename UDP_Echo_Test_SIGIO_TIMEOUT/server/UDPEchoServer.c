@@ -42,6 +42,7 @@ int main(int argc, char *argv[])
     if (servSock < 0)
         Deal_User_Error("SetupUDPServerSocket() faild ",service, ERROR_VALUE);
 
+    //---------------set signal handler for SIGIO signal---------------
     struct sigaction handler;
 
     handler.sa_handler = SIGIOHandler;
@@ -53,15 +54,16 @@ int main(int argc, char *argv[])
     if(sigaction(SIGIO,&handler, 0) < 0)
         Deal_System_Error("sigaction() faild for SIGIO", ERROR_VALUE);
 
-    if(fcntl(servSock, __F_SETOWN, getpid()) < 0)
+    if(fcntl(servSock, __F_SETOWN, getpid()) < 0) //We must own the socket to receive the SIGIO message
         Deal_System_Error("Unable to set process owner to us", ERROR_VALUE);
     
-    if (fcntl(servSock, F_SETFL, O_NONBLOCK | FASYNC) < 0)
+    if (fcntl(servSock, F_SETFL, O_NONBLOCK | FASYNC) < 0)//设置非阻塞和异步IO标志
         Deal_System_Error("Unable to put client sock into non-blocking/async mode", ERROR_VALUE);
+
+    //-------------------------------------------------------------------
 
     for(;;)
     {
-        //HandleUDPClient(servSock);
         UseIdleTime();
     }
 }
