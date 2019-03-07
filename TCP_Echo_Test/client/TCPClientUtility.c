@@ -29,7 +29,7 @@ int SetupTCPClientSocket(const char *host, const char *service)
             PrintSockAddress(addr->ai_addr,stdout);
             break;
         }
-            
+        perror("connect()faild");
         close(sock);
         sock = -1;
     }
