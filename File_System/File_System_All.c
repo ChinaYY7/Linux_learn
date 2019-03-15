@@ -95,7 +95,7 @@ int main(void)
                     ls('d',CONTROL[2]);
             }
             else
-                printf("Input Corret param\n");
+                printf("Input Correct param\n");
         }
 
         else if(strcmp(CONTROL[0],"cd") == 0)
@@ -108,7 +108,7 @@ int main(void)
                     Cd_S(CONTROL[2]);
             }
             else
-                printf("Input Corret param\n"); 
+                printf("Input Correct param\n"); 
         }
 
         else if(strcmp(CONTROL[0],"create") == 0)
@@ -122,7 +122,7 @@ int main(void)
                     printf("File already exit\n");
             }
             else
-                printf("Input Corret param\n"); 
+                printf("Input Correct param\n"); 
         }
 
         else if(strcmp(CONTROL[0],"mkdir") == 0)
@@ -136,7 +136,7 @@ int main(void)
                     printf("File already exit\n");
             }
             else
-                printf("Input Corret param\n"); 
+                printf("Input Correct param\n"); 
         }
 
         else if(strcmp(CONTROL[0],"unlink") == 0)
@@ -148,7 +148,7 @@ int main(void)
                     printf("Unlink Failed!\n");
             }
             else
-                printf("Input Corret param\n"); 
+                printf("Input Correct param\n"); 
         }
 
         else if(strcmp(CONTROL[0],"write") == 0)
@@ -163,10 +163,10 @@ int main(void)
                     printf("Write %d Bytes\n",Write_Num);
                 }
                 else
-                    printf("Input Corret param\n");
+                    printf("Input Correct param\n");
             }
             else
-                printf("Input Corret param\n"); 
+                printf("Input Correct param\n"); 
             Close_s(Mem_Inode_Info);
         }
 
@@ -185,7 +185,7 @@ int main(void)
                     printf("Read Buf: %s\n",Read_Buf);
                 }
                 else
-                    printf("Input Corret param\n"); 
+                    printf("Input Correct param\n"); 
             }
             else
                 printf("Input Corret param\n");
@@ -197,6 +197,11 @@ int main(void)
             Close_File_System();
             break;
         }
+        else
+        {
+            printf("Wrong cmd");
+        }
+        
     }
     Close_File_System();
 }
