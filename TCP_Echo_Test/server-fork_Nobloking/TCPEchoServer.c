@@ -5,13 +5,17 @@
 #include "Deal_Error.h"
 #include "TCPServerUtility.h"
 #include <sys/wait.h>
+#include "AddressUtility.h"
+#include <sys/shm.h>
 
 #define SERVICE_LEN 100
 #define CONFIG_PATH "./config/connect.config"
 #define DELIM " "
 
+
 int main(int argc, char *argv[])
 {
+    //---------------------------------------------------------------------------------------------------
     FILE *Config_file_fp;
     char addrBuffer[SERVICE_LEN];
     char service[SERVICE_LEN];
@@ -30,8 +34,15 @@ int main(int argc, char *argv[])
     }
     else
         Deal_User_Error("wrong arguments","<Server Port>", ERROR_VALUE);
+    //-----------------------------------------------------------------------------------------------------
     
     int servSock = SetupTCPServerSocket(service);  //创建服务端监听TCP套接字
+
+    if(servSock < 0)
+        Deal_System_Error("SetupTCPServerSocket",ERROR_VALUE);
+
+    if (fcntl(servSock, F_SETFL, O_NONBLOCK) < 0)//设置非阻塞
+        Deal_System_Error("Unable to put client sock into non-blocking/async mode", ERROR_VALUE);
 
     if (servSock < 0)
         Deal_User_Error("SetupTCPServerSocket() faild ",service, ERROR_VALUE);
@@ -39,35 +50,34 @@ int main(int argc, char *argv[])
     int clntSock;
     unsigned int childProcCount = 0;
     pid_t processID;
+    struct sockaddr_storage clntAddr;
+    socklen_t clntAddrLen = sizeof(clntAddr);
+
     for(;;)
     {
-        clntSock = AcceptTCPConnection(servSock);
+        clntSock = accept(servSock, (struct sockaddr *)&clntAddr, &clntAddrLen);
         if(clntSock < 0)
-            Deal_System_Error("accept faild!",ERROR_VALUE);
-
-        //Fork child process and report any errors
-        processID = fork();
-        if(processID < 0)
-            Deal_System_Error("fork() faild",ERROR_VALUE);
-        else if(processID == 0)
         {
-            close(servSock);
-            HandleTCPClient(clntSock);
-            exit(0);
+            if(errno != EWOULDBLOCK)
+                Deal_System_Error("accept faild!",ERROR_VALUE);
         }
-        printf("with child process: %d\n", processID);
-        close(clntSock);
-        childProcCount++;
-        //clean up all zombies
-        while(childProcCount)
+        else
         {
-            processID = waitpid((pid_t) -1, NULL, WNOHANG);//Non=blocking wait
+            //Fork child process and report any errors
+            processID = fork();
             if(processID < 0)
-                Deal_System_Error("waitpid() faild", ERROR_VALUE);
-            else if(processID == 0) //No zombil to wait on
-                break;
-            else
-                childProcCount--;
+                Deal_System_Error("fork() faild",ERROR_VALUE);
+            else if(processID == 0)
+            {
+                close(servSock);
+                Get_Peer_Name(clntSock);
+                HandleTCPClient(clntSock);
+                exit(0);
+            }
+            close(clntSock);
+            childProcCount++;
         }
+        if(childProcCount > 0)
+            Clean_Zombies_Process(&childProcCount);
     }
 }
