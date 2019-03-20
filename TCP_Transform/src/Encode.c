@@ -4,16 +4,15 @@
 
 size_t Encode(TransInfo *v, uint8_t *outbuf, size_t bufsize)
 {
-    printf("Encode: Bin\n");
 
     if(bufsize < sizeof(TransInfo))
-        Deal_User_Error("Output buffer too small","",ERROR_VALUE);
+        User_Error_Exit("Output buffer too small","");
 
     TransInfo *vm = (TransInfo *)outbuf;
     memset(outbuf, 0, sizeof(TransInfo));
     v->header= HEAD;
 
-    printf("header=%x, offset=%d, date_size=%d\n",v->header,v->offset,v->date_size);
+    //printf("header=%x, offset=%d, date_size=%d\n",v->header,v->offset,v->date_size);
 
     vm->header = v->header;
     vm->header = htons(v->header);
@@ -28,17 +27,16 @@ size_t Encode(TransInfo *v, uint8_t *outbuf, size_t bufsize)
 
 Bool Decode(TransInfo *v, uint8_t *inbuf, const size_t msize)
 {
-    printf("Decode: Bin\n");
 
     TransInfo *vm = (TransInfo *)inbuf;
     
     v->header = ntohs(vm->header);
     
     if(msize < sizeof(TransInfo))
-        Deal_User_Error("INBUF","too small !", False);
+        User_Error_Exit("INBUF","too small !");
     
     if(v->header != HEAD)
-        Deal_User_Error("HEAD","Not Matching !", False);
+        User_Error_Exit("HEAD","Not Matching !");
 
     v->offset =  ntohl(vm->offset);
     v->date_size = ntohs(vm->date_size);

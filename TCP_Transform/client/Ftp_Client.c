@@ -29,7 +29,7 @@ int main(int argc, char *argv[])
     else if(argc == 1)
     {
         if((Config_file_fp = fopen(CONFIG_PATH,"r")) == NULL)
-            Deal_User_Error("fopen()", "connect.config not exit!", ERROR_VALUE);
+            User_Error_Exit("fopen()", "connect.config not exit!");
 
         fgets(addrBuffer, SERVER_LEN, Config_file_fp);
         token = strtok(addrBuffer, DELIM);
@@ -39,19 +39,19 @@ int main(int argc, char *argv[])
         strcpy(service,token);
     }
     else
-        Deal_User_Error("wrong arguments","<Server Address> <Server Port>",ERROR_VALUE);
+        User_Error_Exit("wrong arguments","<Server Address> <Server Port>");
     
     int sock = SetupTCPClientSocket(server, service);
 
     //if (fcntl(sock, F_SETFL, O_NONBLOCK) < 0)//设置非阻塞
-        //Deal_System_Error("Unable to put client sock into non-blocking/async mode", ERROR_VALUE);
+        //System_Error_Exit("Unable to put client sock into non-blocking/async mode");
 
     if (sock < 0)
-        Deal_User_Error("SetupTCPClientSocket() faild!", "Unable to connect",ERROR_VALUE);
+        User_Error_Exit("SetupTCPClientSocket() faild!", "Unable to connect");
 
     FILE *str = fdopen(sock, "r+");
     if(str == NULL)
-        Deal_System_Error("fdopen() faild", ERROR_VALUE);
+        System_Error_Exit("fdopen() faild");
 
     char echoString[BUFFSIZE];
     size_t echoStringLen;
@@ -66,12 +66,10 @@ int main(int argc, char *argv[])
     memset(&vi, 0, sizeof(vi));
 
     FILE *tmp_fp;
-    if((tmp_fp = fopen(TMP_Path,"w")) == NULL)
-        Deal_User_Error("fopen() error", "create temp file failed",ERROR_VALUE);    
 
     while(1)
     {
-        printf("\nPlease input sended string:   ");
+        printf("\nftp@cmd:   ");
         fgets(echoString, BUFFSIZE, stdin);
 
         echoStringLen = strlen(echoString);
@@ -79,25 +77,26 @@ int main(int argc, char *argv[])
         numBytes = TCP_nSend(sock, echoString, echoStringLen);
         if(numBytes < 0)
             exit(ERROR_VALUE);
-        printf("send %lu bytes\n", numBytes);
+
+        if((tmp_fp = fopen(TMP_Path,"w+")) == NULL)
+            User_Error_Exit("fopen() error", "create temp file failed");    
 
         while(1)
         {
             Get_size = GetNextMsg(str,inbuf,MAX_WIRE_SIZE);
             Decode(&vi, inbuf, MAX_WIRE_SIZE);
             fseek(tmp_fp, vi.offset, SEEK_SET);
-            printf("header=%x, offset=%d, date_size=%d\n",vi.header,vi.offset,vi.date_size);
+            //printf("header=%x, offset=%d, date_size=%d\n",vi.header,vi.offset,vi.date_size);
             write_count = fwrite(vi.data,sizeof(char),vi.date_size,tmp_fp);
-            fflush(tmp_fp);
-            printf("writecount=%d\n",write_count);
+            
+            //printf("writecount=%d\n",write_count);
             if(vi.date_size < BUFFER_SIZE)
             {
+                fclose(tmp_fp);
                 system("cat temp");
                 break;
             }
         }
-
-        //printf("Received from sever %lu bytes", numBytes);
     }
 
     close(sock);

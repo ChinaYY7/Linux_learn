@@ -1,1 +1,6 @@
-/mnt/f/Linux_code/Linux_learn/TCP_Transform/server-fork_Nobloking
+Ftp_Server.c
+Ftp_Server.sh
+Ftp_ServerUtility.c
+Ftp_ServerUtility.h
+config
+temp

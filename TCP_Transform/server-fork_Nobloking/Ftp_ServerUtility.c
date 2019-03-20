@@ -1,13 +1,36 @@
-#include "Ftp_ServerUtility.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/wait.h>
+#include "Ftp_ServerUtility.h"
 #include "Deal_Error.h"
 #include "AddressUtility.h"
-#include <sys/wait.h>
 #include "Trans_Protocol.h"
 #include "Encode.h"
 #include "Framer.h"
+
+void Get_Server_Config(char *service, int argc, char **argv)
+{
+    FILE *Config_file_fp;
+    char addrBuffer[SERVICE_LEN];
+    char *token;
+    
+    if(argc ==2)  //优先读取命令行参数
+        strcpy(service, argv[1]);
+    else if(argc == 1) //使用默认参数，即读取配置文件
+    {
+        if((Config_file_fp = fopen(CONFIG_PATH,"r")) == NULL)
+            User_Error_Exit("fopen()", "connect.config not exit!");
+
+        fgets(addrBuffer, SERVICE_LEN, Config_file_fp);
+        token = strtok(addrBuffer, DELIM);
+        strcpy(service,token);
+    }
+    else
+        User_Error_Exit("wrong arguments","<Server Port>");
+
+    fclose(Config_file_fp);
+}
 
 int SetupTCPServerSocket(const char *service)
 {
@@ -23,7 +46,7 @@ int SetupTCPServerSocket(const char *service)
     int rtnVal = getaddrinfo(NULL, service, &addrCriteria, &servAddr);
     
     if(rtnVal != 0)
-        Deal_User_Error("getaddrinfo()", "faild", ERROR_VALUE);
+        User_Error_Exit("getaddrinfo()", "faild");
     
     int servSock = -1;
 
@@ -49,27 +72,29 @@ int SetupTCPServerSocket(const char *service)
     return servSock;
 }
 
-int Get_Sock_Name(int sock_fd)  //sock本地端的IP地址和端口
+//sock本地端的IP地址和端口
+int Get_Sock_Name(int sock_fd)  
 {
     struct sockaddr_storage localAddr;
     socklen_t addrSize = sizeof(localAddr);
     if(getsockname(sock_fd, (struct sockaddr *)&localAddr,&addrSize) < 0)
-        Deal_System_Error("getsockname() faild!",ERROR_VALUE);
+        System_Error_Exit("getsockname() faild!");
 
     PrintSockAddress((struct sockaddr *)&localAddr, stdout);
 }
 
-int Get_Peer_Name(int sock_fd) //sock连接端的IP地址和端口
+//sock连接端的IP地址和端口
+int Get_Peer_Name(int sock_fd) 
 {
     struct sockaddr_storage localAddr;
     socklen_t addrSize = sizeof(localAddr);
     if(getpeername(sock_fd, (struct sockaddr *)&localAddr,&addrSize) < 0)
-        Deal_System_Error("getpeername() faild!",ERROR_VALUE);
+        System_Error_Exit("getpeername() faild!");
 
-    printf("\n");
     PrintSockAddress((struct sockaddr *)&localAddr, stdout);
 }
 
+//获取客户端的套接字
 int AcceptTCPConnection(int servSock)
 {
     struct sockaddr_storage clntAddr;
@@ -77,7 +102,7 @@ int AcceptTCPConnection(int servSock)
     int clntScok = accept(servSock, (struct sockaddr *)&clntAddr, &clntAddrLen);
     
     if(clntScok < 0)
-        Deal_System_Error("accept() faild!",ERROR_VALUE);
+        System_Error_Exit("accept() faild!");
     
     fputs("\nHandling client ", stdout);
     PrintSockAddress((struct sockaddr *)&clntAddr, stdout);
@@ -90,13 +115,17 @@ int TCP_nSend(int sock_fd, const void *buf, size_t buf_len)
 
     Send_Bytes = send(sock_fd, buf, buf_len, 0);
     if(Send_Bytes < 0)
-        Deal_System_Error("send faild",ERROR_VALUE);
+        System_Error_Exit("send faild");
     else if (Send_Bytes != buf_len)
-        Deal_User_Error("send","sent unexpected number of bytes", ERROR_VALUE);
+        User_Error_Exit("send","sent unexpected number of bytes");
 
     return Send_Bytes;
 }
 
+//从sock中读取接收到的数据
+//buf_len = 0时，读一次，最多读满一个BUFFSIZE
+//buf_len > 0时，读到buf_len的大小为止
+//当连接关闭时，返回0，没有接收到数据时，阻塞，接收到数据时，返回读取的字节数
 int TCP_nReceive(int sock_fd, void *buf, size_t buf_len)
 {
     ssize_t numBytes;
@@ -106,11 +135,11 @@ int TCP_nReceive(int sock_fd, void *buf, size_t buf_len)
     {
         numBytes = recv(sock_fd, buf, BUFFSIZE - 1, 0);
         if(numBytes < 0)
-            Deal_System_Error("recv() faild\n",ERROR_VALUE);
+            System_Error_Exit("recv() faild\n");
         else if(numBytes == 0)
         {
             Get_Peer_Name(sock_fd);
-            printf("connection closed prematurely\n");
+            printf("Connection disconneted\n");
         }    
         return numBytes;
     }
@@ -120,9 +149,9 @@ int TCP_nReceive(int sock_fd, void *buf, size_t buf_len)
         {
             numBytes = recv(sock_fd, buf, BUFFSIZE - 1, 0);
             if(numBytes < 0)
-                Deal_System_Error("recv() faild\n",ERROR_VALUE);
+                System_Error_Exit("recv() faild\n");
             else if(numBytes == 0)
-                Deal_User_Error("recv", "connection closed prematurely", ERROR_VALUE);
+                User_Error_Exit("recv", "connection closed prematurely");
             totalBytesRcvd += numBytes;
         }
 
@@ -130,69 +159,14 @@ int TCP_nReceive(int sock_fd, void *buf, size_t buf_len)
     }   
 }
 
+//清理僵尸进程
 void Clean_Zombies_Process(int *childProcCount)
 {
     int processID = waitpid((pid_t) -1, NULL, WNOHANG);//Non=blocking wait
     if(processID < 0)
-        Deal_System_Error("waitpid() faild", ERROR_VALUE);
+        System_Error_Exit("waitpid() faild");
     else if(processID > 0)
         (*childProcCount)--;
-}
-
-void TCP_Server_Runing(Client_Sock *ClntSock_Table)
-{
-    char *cmd;
-    while(1)
-    {
-        system("date");
-        printf("INPUT CMD: ");
-        fgets(cmd,100,stdin);
-        if(strcmp(cmd,"client") == 0)
-        {
-            Travel_Client_Table(ClntSock_Table, 1);
-        }
-        else
-        {
-            printf("wrong cmd\n");
-        }
-    }
-}
-
-int Insert_Client_Table(Client_Sock *ClntSock_Table, int sock)
-{
-    int i;
-    for(i = 0; i < CLIENT_NUM; i++)
-    {
-        if(ClntSock_Table[i].sta == False)
-        {
-            ClntSock_Table[i].sock_id = sock;
-            ClntSock_Table[i].sta = True;
-            return i;
-        }
-    }
-    printf("Client_Sock_Table filled\n");
-    return -1;
-}
-
-void Travel_Client_Table(Client_Sock *ClntSock_Table, char cmd)
-{
-    int i;
-    struct sockaddr_storage localAddr;
-    socklen_t addrSize = sizeof(localAddr);
-
-    for(i = 0; i < CLIENT_NUM; i++)
-    {
-        if(ClntSock_Table[i].sta == True)
-        {
-            if(getpeername(ClntSock_Table[i].sock_id, (struct sockaddr *)&localAddr,&addrSize) < 0)
-                ClntSock_Table[i].sta = False;
-            else
-            {
-                if(cmd == 1)
-                    PrintSockAddress((struct sockaddr *)&localAddr, stdout);
-            }
-        }
-    }
 }
 
 void HandleTCPClient(int clntSocket)
@@ -207,15 +181,14 @@ void HandleTCPClient(int clntSocket)
 
     memset(&vi, 0, sizeof(vi));
 
+    //使用流包装套接字
     FILE *str = fdopen(clntSocket, "r+");
     if(str == NULL)
-        Deal_System_Error("fdopen() faild", ERROR_VALUE);
+        System_Error_Exit("fdopen(clntSocket) faild");
 
-    system("PATH=/bin:/sbin:/usr/bin:/usr/sbin");
-    system("export PATH");
-
-    if((tmp_fp = fopen(TMP_Path,"r+")) == NULL)
-        Deal_User_Error("fopen() error", "temp file not exit",ERROR_VALUE);
+    //创建一个临时文件用于保存客户端命令在服务端执行的结果
+    if((tmp_fp = fopen(TMP_Path,"w+")) == NULL)
+        User_Error_Exit("fopen(TMP_Path) error", "temp file not exit");
 
     while(numBytesRcved > 0)
     {
@@ -230,7 +203,7 @@ void HandleTCPClient(int clntSocket)
             {
                 vi.offset = ftell(tmp_fp);
                 ReadCount = fread(vi.data,sizeof(uint8_t),BUFFER_SIZE,tmp_fp);
-                printf("readcount=%d\n",ReadCount);
+                //printf("readcount=%d\n",ReadCount);
                 if(ReadCount < BUFFER_SIZE)
                 {
                     if(feof(tmp_fp))
@@ -241,7 +214,7 @@ void HandleTCPClient(int clntSocket)
                         break;
                     }
                     else if(ferror(tmp_fp))
-                        Deal_User_Error("fread()","error", ERROR_VALUE);
+                        User_Error_Exit("fread()","error");
                 }
                 vi.date_size = ReadCount;
                 Encode(&vi, outbuf, MAX_WIRE_SIZE);
