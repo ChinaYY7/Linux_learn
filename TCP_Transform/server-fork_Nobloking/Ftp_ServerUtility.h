@@ -8,8 +8,8 @@ static const int MAXPENDING = 5;
 #define DELIM " "
 
 #define CLIENT_NUM 10
-#define CMD_TMP_PATH " 1>/mnt/f/Linux_code/Linux_learn/TCP_Transform/server-fork_Nobloking/temp 2>/mnt/f/Linux_code/Linux_learn/TCP_Transform/server-fork_Nobloking/temp"
-#define TMP_Path "/mnt/f/Linux_code/Linux_learn/TCP_Transform/server-fork_Nobloking/temp"
+#define CMD_TMP_PATH " 1>/mnt/f/Linux_code/Linux_learn/TCP_Transform/server-fork_Nobloking/temp/temp 2>/mnt/f/Linux_code/Linux_learn/TCP_Transform/server-fork_Nobloking/temp/temp"
+#define TMP_Path "/mnt/f/Linux_code/Linux_learn/TCP_Transform/server-fork_Nobloking/temp/temp"
 
 
 void HandleTCPClient(int clntSocket);
