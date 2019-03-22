@@ -4,12 +4,16 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
-#define TMP_Path "/mnt/f/Linux_code/Linux_learn/TCP_Transform/client/temp"
+#define SERVER_LEN 100
+#define SERVICE_LEN 100
+#define CONFIG_PATH "./config/connect.config"
+#define DELIM " "
+#define TMP_Path "./temp/temp"
 
+void Get_Server_Config(char *server, char *service, int argc, char **argv);
 int SetupTCPClientSocket(const char *host, const char *service);
 int TCP_nSend(int sock_fd, const void *buf, size_t buf_len);
 int TCP_nReceive(int sock_fd, void *buf, size_t buf_len);
 int Get_Sock_Name(int sock_fd);
-int TCP_get_string(int sock_fd, char *str);
-ssize_t TCP_get_all(int sock_fd);
+int Get_Peer_Name(int sock_fd);
 #endif

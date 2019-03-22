@@ -1,6 +1,36 @@
 #include "Ftp_ClientUtility.h"
 #include "Deal_Error.h"
-#include "AddressUtility.h" 
+#include "AddressUtility.h"
+
+//获取客户端配置
+void Get_Server_Config(char *server, char *service, int argc, char **argv)
+{
+    FILE *Config_file_fp;
+    char addrBuffer[SERVICE_LEN];
+    char *token;
+    
+    if(argc ==3)
+    {
+        strcpy(server, argv[1]);
+        strcpy(service, argv[2]);
+    }
+    else if(argc == 1)
+    {
+        if((Config_file_fp = fopen(CONFIG_PATH,"r")) == NULL)
+            User_Error_Exit("fopen()", "connect.config not exit!");
+
+        fgets(addrBuffer, SERVER_LEN, Config_file_fp);
+        token = strtok(addrBuffer, DELIM);
+        strcpy(server,token);
+
+        token = strtok(NULL, DELIM);
+        strcpy(service,token);
+
+        fclose(Config_file_fp);
+    }
+    else
+        User_Error_Exit("wrong arguments","<Server Address> <Server Port>");
+}
 
 int SetupTCPClientSocket(const char *host, const char *service)
 {
@@ -38,12 +68,24 @@ int SetupTCPClientSocket(const char *host, const char *service)
     return sock;
 }
 
-int Get_Sock_Name(int sock_fd)
+//sock套接字本地端的IP地址和端口
+int Get_Sock_Name(int sock_fd)  
 {
     struct sockaddr_storage localAddr;
     socklen_t addrSize = sizeof(localAddr);
     if(getsockname(sock_fd, (struct sockaddr *)&localAddr,&addrSize) < 0)
         System_Error_Exit("getsockname() faild!");
+
+    PrintSockAddress((struct sockaddr *)&localAddr, stdout);
+}
+
+//sock套接字连接端的IP地址和端口
+int Get_Peer_Name(int sock_fd) 
+{
+    struct sockaddr_storage localAddr;
+    socklen_t addrSize = sizeof(localAddr);
+    if(getpeername(sock_fd, (struct sockaddr *)&localAddr,&addrSize) < 0)
+        System_Error_Exit("getpeername() faild!");
 
     PrintSockAddress((struct sockaddr *)&localAddr, stdout);
 }
@@ -61,6 +103,25 @@ int TCP_nSend(int sock_fd, const void *buf, size_t buf_len)
     return Send_Bytes;
 }
 
+//读取接收缓存区，并处理异常情况
+//当连接关闭时，返回0，没有接收到数据时，阻塞，接收到数据时，返回读取的字节数
+ssize_t recv_tcp(int sock_fd, void *buf)
+{
+    ssize_t numBytes;
+    numBytes = recv(sock_fd, buf, BUFFSIZE - 1, 0);
+    if(numBytes < 0)
+        System_Error_Exit("recv() faild\n");
+    else if(numBytes == 0)
+    {
+        Get_Peer_Name(sock_fd);
+        printf("Connection disconneted\n");
+    }    
+    return numBytes;
+}
+
+//从sock中读取接收到的数据
+//buf_len = 0时，读一次，最多读满一个BUFFSIZE
+//buf_len > 0时，读到buf_len的大小为止
 int TCP_nReceive(int sock_fd, void *buf, size_t buf_len)
 {
     ssize_t numBytes;
@@ -68,93 +129,16 @@ int TCP_nReceive(int sock_fd, void *buf, size_t buf_len)
 
     if(buf_len == 0)
     {
-        numBytes = recv(sock_fd, buf, BUFFSIZE - 1, 0);
-        if(numBytes < 0)
-            System_Error_Exit("recv() faild\n");
-        else if(numBytes == 0)
-            printf("\nconnection closed prematurely\n");
+        numBytes = recv_tcp(sock_fd, buf);
         return numBytes;
     }
     else
     {
         while(totalBytesRcvd < buf_len)
         {
-            numBytes = recv(sock_fd, buf, BUFFSIZE - 1, 0);
-            if(numBytes < 0)
-                System_Error_Exit("recv() faild\n");
-            else if(numBytes == 0)
-                User_Error_Exit("recv", "connection closed prematurely");
-            
+            numBytes = recv_tcp(sock_fd, buf);;
             totalBytesRcvd += numBytes;
         }
-
         return totalBytesRcvd;
     }   
-}
-
-char TCP_Receive_char(int sock_fd)
-{
-    ssize_t numBytes;
-    char ch;
-    numBytes = recv(sock_fd, &ch, 1, 0);
-    if(numBytes < 0)
-    {
-        if(errno != EWOULDBLOCK)
-            System_Error_Exit("accept faild!");
-        else
-            ch = -1;
-    }
-    if(ch != -1)
-        //printf("ch = %c \n", ch);
-    return ch;
-}
-
-int TCP_get_string(int sock_fd, char *str)
-{
-    ssize_t numBytes = 0;
-    str[numBytes] = TCP_Receive_char(sock_fd);
-    //if(str[numBytes] != -1)
-        //printf("numBytes = %ld, ch = %c\n", numBytes,str[numBytes]);
-    while(1)
-    {
-        if(str[numBytes]  == '\n')
-        {
-            //printf("read a ENTER\n");
-            break;
-        }
-        else if(str[numBytes]  == -1)
-        {
-            //printf("read a END\n");
-            break;
-        }
-        numBytes++;
-        str[numBytes] = TCP_Receive_char(sock_fd);
-        //printf("numBytes = %ld, ch = %c\n", numBytes,str[numBytes]);
-        //sleep(1);
-    }
-    return numBytes;
-}
-
-ssize_t TCP_get_all(int sock_fd)
-{
-    char buffer[BUFFSIZE];
-    ssize_t numBytes = 0;
-    ssize_t sumBytes = 0;
-    numBytes = TCP_get_string(sock_fd, buffer);
-    //printf("numBytes = %ld\n",numBytes);
-    sumBytes+=numBytes;
-    if(numBytes > 0)
-        printf("%s", buffer);
-    while(numBytes != 0)
-    {
-        numBytes = TCP_get_string(sock_fd, buffer);
-        //printf("numBytes = %ld\n",numBytes);
-        sumBytes+=numBytes;
-        if(numBytes > 0)
-            printf("%s", buffer);
-        //sleep(1);
-    }
-    //printf("sumBytes = %ld\n",sumBytes);
-    //sleep(1);
-    return sumBytes;
 }

@@ -10,7 +10,7 @@ int main(int argc, char *argv[])
 {
     char service[SERVICE_LEN];
     
-    //从命令行或者配置文件获取端口号
+    //从命令行或者配置文件获取需要绑定的端口号
     Get_Server_Config(service,argc,argv);
     
     //创建服务端监听TCP套接字

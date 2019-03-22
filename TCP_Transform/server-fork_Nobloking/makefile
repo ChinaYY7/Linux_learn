@@ -1,27 +1,35 @@
-target=./bin/Ftp_Server.bin
-objects=./object/Ftp_Server.o ./object/Ftp_ServerUtility.o ./object/AddressUtility.o ./object/Deal_Error.o ./object/Encode.o ./object/Framer.o
+vpath %.c ../src
+vpath %.h ../src 
+vpath %.o ./object
 
-$(target) : $(objects) ../src/apue.h
-	cc -g $(objects) -o $(target) -I ../src
+object_path=./object
+bin_path=./bin
+src_path=../src
+target=$(bin_path)/Ftp_Server.bin
+objects=Ftp_Server.o Ftp_ServerUtility.o AddressUtility.o Deal_Error.o Encode.o Framer.o
+CFLAGS=-I ../src
 
-./object/Ftp_Server.o : Ftp_Server.c ../src/*.h
-	cc -c Ftp_Server.c -o ./object/Ftp_Server.o -I ../src
+$(target) : $(objects)
+	cd object && cc -g $(objects) -o ../$(target) $(CFLAGS) 
 
-./object/Ftp_ServerUtility.o : Ftp_ServerUtility.c ../src/*.h
-	cc -c Ftp_ServerUtility.c -o ./object/Ftp_ServerUtility.o -I ../src
+Ftp_Server.o : Ftp_Server.c *.h ../src/*.h
+	cc -c Ftp_Server.c -o $(object_path)/Ftp_Server.o $(CFLAGS)
 
-./object/AddressUtility.o : ../src/AddressUtility.c ../src/*.h
-	cc -c ../src/AddressUtility.c -o ./object/AddressUtility.o -I ../src
+Ftp_ServerUtility.o : Ftp_ServerUtility.c Ftp_ServerUtility.h AddressUtility.h Deal_Error.h apue.h
+	cc -c Ftp_ServerUtility.c -o $(object_path)/Ftp_ServerUtility.o $(CFLAGS) 
 
-./object/Deal_Error.o : ../src/Deal_Error.c ../src/*.h
-	cc -c ../src/Deal_Error.c -o ./object/Deal_Error.o -I ../src
+AddressUtility.o : AddressUtility.c AddressUtility.h apue.h
+	cc -c $(src_path)/AddressUtility.c -o $(object_path)/AddressUtility.o $(CFLAGS) 
 
-./object/Encode.o : ../src/Encode.c ../src/*.h
-	cc -c ../src/Encode.c -o ./object/Encode.o -I ../src
+Deal_Error.o : Deal_Error.c Deal_Error.h apue.h
+	cc -c $(src_path)/Deal_Error.c -o $(object_path)/Deal_Error.o $(CFLAGS) 
 
-./object/Framer.o : ../src/Framer.c ../src/*.h
-	cc -c ../src/Framer.c -o ./object/Framer.o -I ../src
+Encode.o : Encode.c Encode.h Trans_Protocol.h
+	cc -c $(src_path)/Encode.c -o $(object_path)/Encode.o $(CFLAGS) 
+
+Framer.o : Framer.c Framer.h Deal_Error.h apue.h
+	cc -c $(src_path)/Framer.c -o $(object_path)/Framer.o $(CFLAGS) 
 
 .PHONY: clean
 clean :
-	rm $(target) $(objects)
+	-rm $(target) $(object_path)/*.o

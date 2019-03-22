@@ -1,6 +1,6 @@
+#include <netinet/in.h>
 #include "Framer.h"
 #include "Deal_Error.h"
-#include <netinet/in.h>
 int GetNextMsg(FILE *in, uint8_t *buf, size_t buffsize)
 {
     uint16_t msize = 0;
@@ -17,7 +17,6 @@ int GetNextMsg(FILE *in, uint8_t *buf, size_t buffsize)
             return 0;
     }
         
-
     msize = ntohs(msize);
     
     if(msize > buffsize)
