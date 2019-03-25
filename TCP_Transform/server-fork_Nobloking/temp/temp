@@ -1,9 +1,0 @@
-Ftp_Server.c
-Ftp_Server.sh
-Ftp_ServerUtility.c
-Ftp_ServerUtility.h
-bin
-config
-makefile
-object
-temp

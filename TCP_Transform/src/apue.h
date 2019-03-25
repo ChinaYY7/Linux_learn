@@ -2,6 +2,7 @@
 #define _APUE_H
 
 #define Termux 0
+#define DELIM " "
 
 #include <sys/types.h>
 #include <sys/stat.h>
