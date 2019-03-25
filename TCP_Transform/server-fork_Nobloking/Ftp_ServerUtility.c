@@ -6,8 +6,6 @@
 #include "Deal_Error.h"
 #include "AddressUtility.h"
 #include "Trans_Protocol.h"
-#include "Encode.h"
-#include "Framer.h"
 
 //获取服务端配置
 void Get_Server_Config(char *service, int argc, char **argv)
@@ -175,14 +173,13 @@ void Clean_Zombies_Process(int *childProcCount)
 
 void HandleTCPClient(int clntSocket)
 {
-    char buffer[BUFFSIZE];
+    char Cmd_Buffer[BUFFSIZE];
     ssize_t numBytesRcved = 1;
     static FILE *tmp_fp;
-    uint16_t ReadCount = 0;
-    TransInfo vi;
-    uint8_t outbuf[MAX_WIRE_SIZE];
+    
+    char *token;
+    char Cmd[SERVICE_LEN],Parameter[3][SERVICE_LEN];
 
-    memset(&vi, 0, sizeof(vi));
 
     //使用流包装套接字
     FILE *str = fdopen(clntSocket, "r+");
@@ -191,41 +188,44 @@ void HandleTCPClient(int clntSocket)
 
     //创建一个临时文件用于保存客户端命令在服务端执行的结果
     if((tmp_fp = fopen(TMP_Path,"w+")) == NULL)
-        User_Error_Exit("fopen(TMP_Path) error", "temp file not exit");
+        User_Error_Exit("fopen(TMP_Path) error", "creat temp failed");
+
+    fclose(tmp_fp);
 
     while(numBytesRcved > 0)
     {
-        numBytesRcved = TCP_nReceive(clntSocket, buffer, 0);
-        if(numBytesRcved != 0)
+        numBytesRcved = Recv_Messege(str, Cmd_Buffer); //获取指令
+        
+        //链接断开
+        if(numBytesRcved == 0)
         {
-            //命令包装，加入输出重定向到文件
-            buffer[numBytesRcved - 1] = '\0';
-            strcat(buffer,CMD_TMP_PATH);
+            Get_Peer_Name(clntSocket);
+            printf("Connection disconneted\n");
+            break;
+        }
+        token = strtok(Cmd_Buffer, DELIM);
+        strcpy(Cmd,token);
 
-            //执行命令
-            system(buffer);
-            
-            //传输保存有命令执行结果的文件
-            while(1)
-            {
-                vi.offset = ftell(tmp_fp);  //获取当前文件偏移量
-                ReadCount = fread(vi.data,sizeof(uint8_t),BUFFER_SIZE,tmp_fp);
-
-                //处理读到的最后一块，一般最后一块小于一整块的数量（一块4096字节）
-                if(ReadCount < BUFFER_SIZE)
-                {
-                    if(ferror(tmp_fp))
-                        User_Error_Exit("fread()","error");
-                }
-                vi.date_size = ReadCount;
-                Encode(&vi, outbuf, MAX_WIRE_SIZE);  //编码
-                PutMsg(outbuf,sizeof(TransInfo),str);//成帧发送
-
-                //读到文件尾
-                if(feof(tmp_fp))
-                    break;
-            }
-            fseek(tmp_fp, 0, SEEK_SET);             //重置文件偏移量
+        if(strcmp(Cmd,"down") == 0)  //执行用户命令
+        {
+            token = strtok(NULL, DELIM);
+            if(token != NULL )
+                strcpy(Parameter[0],token);
+            else
+                Send_Messege (str, "Download Parameter is wrong : down <source> <target>");
+                
+            token = strtok(NULL, DELIM);
+            if(token != NULL)
+                strcpy(Parameter[1],token);
+            else
+                Send_Messege (str, "Download Parameter is wrong : down <source> <target>");
+            printf("Cmd: %s\nParameter[1]: %s\nParameter[2]: %s\n", Cmd, Parameter[0], Parameter[1]);
+        }
+        else  //执行系统命令
+        {
+            strcat(Cmd_Buffer,CMD_TMP_PATH);    //命令包装，加入输出重定向到文件
+            system(Cmd_Buffer);                 //执行命令
+            Send_File(str, TMP_Path);       //传输保存有命令执行结果的文件
         }
     }
     fclose(str); //flushes stream and closes socket

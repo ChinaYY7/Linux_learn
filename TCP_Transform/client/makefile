@@ -6,7 +6,7 @@ object_path=./object
 bin_path=./bin
 src_path=../src
 target=$(bin_path)/Ftp_Client.bin
-objects=Ftp_Client.o Ftp_ClientUtility.o AddressUtility.o Deal_Error.o Encode.o Framer.o
+objects=Ftp_Client.o Ftp_ClientUtility.o AddressUtility.o Deal_Error.o Encode.o Framer.o Trans_Protocol.o
 CFLAGS=-I ../src
 
 $(target) : $(objects)
@@ -15,7 +15,7 @@ $(target) : $(objects)
 Ftp_Client.o : Ftp_Client.c *.h ../src/*.h
 	cc -c -g Ftp_Client.c -o $(object_path)/Ftp_Client.o $(CFLAGS)
 
-Ftp_ClientUtility.o : Ftp_ClientUtility.c Ftp_ClientUtility.h AddressUtility.h Deal_Error.h apue.h
+Ftp_ClientUtility.o : Ftp_ClientUtility.c *.h ../src/*.h
 	cc -c -g Ftp_ClientUtility.c -o $(object_path)/Ftp_ClientUtility.o $(CFLAGS) 
 
 AddressUtility.o : AddressUtility.c AddressUtility.h apue.h
@@ -24,7 +24,10 @@ AddressUtility.o : AddressUtility.c AddressUtility.h apue.h
 Deal_Error.o : Deal_Error.c Deal_Error.h apue.h
 	cc -c -g $(src_path)/Deal_Error.c -o $(object_path)/Deal_Error.o $(CFLAGS) 
 
-Encode.o : Encode.c Encode.h Trans_Protocol.h
+Trans_Protocol.o : Trans_Protocol.c  Trans_Protocol.h Encode.h Framer.h apue.h Deal_Error.h
+	cc -c -g $(src_path)/Trans_Protocol.c -o $(object_path)/Trans_Protocol.o $(CFLAGS)
+
+Encode.o : Encode.c Encode.h Trans_Protocol.h apue.h
 	cc -c -g $(src_path)/Encode.c -o $(object_path)/Encode.o $(CFLAGS) 
 
 Framer.o : Framer.c Framer.h Deal_Error.h apue.h
