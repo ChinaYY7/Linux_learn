@@ -20,6 +20,10 @@ int main(int argc, char *argv[])
     if (sock < 0)
         User_Error_Exit("SetupTCPClientSocket(sock) faild!", "Unable to connect");
 
+    //设置为非阻塞
+    if (fcntl(sock, F_SETFL, O_NONBLOCK) < 0)
+        System_Error_Exit("Unable to put sock into non-blocking");
+
     //使用流包装套接字
     FILE *Cmd_Str = fdopen(sock, "r+");
     if(Cmd_Str == NULL)
@@ -45,16 +49,21 @@ int main(int argc, char *argv[])
 
     close(Server_Sock);
 
+    //设置为非阻塞
+    //if (fcntl(Date_Sock, F_SETFL, O_NONBLOCK) < 0)
+        //System_Error_Exit("Unable to put Date_Sock into non-blocking");
+
     //使用流包装套接字
     FILE *Date_Str = fdopen(Date_Sock, "r+");
     if(Date_Str == NULL)
-        System_Error_Exit("fdopen(Server_Sock) faild");
+        System_Error_Exit("fdopen(Date_Sock) faild");
 
 
     char Cmd_buffer[BUFFSIZE], Cmd[BUFFSIZE];
     char *token;
     char Parameter[3][SERVICE_LEN];
     char Messege[MAX_WIRE_SIZE];
+    int Recv_File_Bytes = 0, Recv_Msg_Bytes = 0;
 
     while(1)
     {   
@@ -72,21 +81,62 @@ int main(int argc, char *argv[])
             if(Cmd_sta == True)
             {
                 Send_Messege(Cmd_Str, Cmd);
-                int Recv_Bytes = Recv_File(Date_Str, Parameter[2]);
+                Recv_File_Bytes = Recv_File(Date_Str, Parameter[2]);
+                /*
+                Recv_File_Bytes = 0;
+                while(1)
+                {
+                    if(Recv_File_Bytes != -2)
+                        Recv_File_Bytes = Recv_File(Date_Str, Parameter[2]);
+                    if(Recv_File_Bytes == -1)
+                    {
+                        if(errno != EWOULDBLOCK)
+                        {
+                            System_Error("Recv_File accept faild!");
+                            break;
+                        }
+                    }
+                    else if(Recv_File_Bytes > 0)
+                        break;
 
-                printf("Download file : %s completed, Download %d bytes\n", Parameter[1], Recv_Bytes);
+                    Recv_Msg_Bytes = Recv_Messege(Cmd_Str, Messege);
+                    if(Recv_Msg_Bytes == -1)
+                    {
+                        if(errno != EWOULDBLOCK)
+                        {
+                            System_Error("Recv_Messege accept faild!");
+                            break;
+                        }
+                    }
+                    else if(Recv_Msg_Bytes > 0)
+                    {
+                        printf("Messege from server: %s\n", Messege);
+                        break;
+                    }
+                
+                }
+                */
             }
             else
-            {
                 printf("Download Parameter is wrong : down <source> <target>\n");
-            }
-            //Recv_Messege(Cmd_Str, Messege);
-            //printf("Messege from server: %s\n", Messege);
         }
         else
         {
             Send_Messege(Cmd_Str, Cmd);
-            Recv_File(Cmd_Str, TMP_Path);
+            while(1)
+            {
+                Recv_File_Bytes = Recv_File(Cmd_Str, TMP_Path);
+                if(Recv_File_Bytes == -1)
+                {
+                    if(errno != EWOULDBLOCK)
+                    {
+                        System_Error("accept faild!");
+                        break;
+                    }
+                }
+                else if(Recv_File_Bytes > 0)
+                    break;
+            }
             system("cat ./temp/temp");
         }
     }

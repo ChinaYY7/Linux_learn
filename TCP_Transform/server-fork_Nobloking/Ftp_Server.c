@@ -5,6 +5,8 @@
 #include "TCP_Socket.h"
 #include "Deal_Error.h"
 #include "Ftp_ServerUtility.h"
+#include "Trans_Protocol.h"
+
 
 int main(int argc, char *argv[])
 {
@@ -14,13 +16,14 @@ int main(int argc, char *argv[])
     Get_Server_Config(service,argc,argv);
     
     //创建服务端监听TCP套接字
+    fputc('\n',stdout);
     int servSock = SetupTCPServerSocket(service);  
     if(servSock < 0)
         System_Error_Exit("SetupTCPServerSocket() faild");
 
     //监听套接字设置为非阻塞
     if (fcntl(servSock, F_SETFL, O_NONBLOCK) < 0)
-        System_Error_Exit("Unable to put client sock into non-blocking");
+        System_Error_Exit("Unable to put servSock into non-blocking");
 
     int clntSock;
     unsigned int childProcCount = 0;
@@ -45,7 +48,7 @@ int main(int argc, char *argv[])
             else if(processID == 0)
             {
                 close(servSock);
-                printf("ProcessID: %d  ",getpid());
+                printf("\nProcessID: %d\nClient->Server: ",getpid());
                 Get_Peer_Name(clntSock);
                 HandleTCPClient(clntSock);
                 exit(0);

@@ -46,12 +46,34 @@ void HandleTCPClient(int clntSocket)
     
     char *token;
     char Parameter[3][SERVICE_LEN];
+    
+    //使用流包装套接字
+    FILE *Cmd_Str = fdopen(clntSocket, "r+");
+    if(Cmd_Str == NULL)
+        System_Error_Exit("fdopen(clntSocket) faild");
 
+    //创建服务端连接客户端的套接字
+    char Date_Port[6];
+    numBytesRcved = Recv_Messege(Cmd_Str, Date_Port); //获取指令
+    //链接断开
+    if(numBytesRcved == 0)
+    {
+        Get_Peer_Name(clntSocket);
+        printf(" Connection disconneted\n");
+        fclose(Cmd_Str); //flushes stream and closes socket
+        return;
+    }
+    printf("\nServer->Client: ");
+    char addrBuffer[INET6_ADDRSTRLEN];
+    Get_Address(clntSocket, addrBuffer);
+    int Date_Sock = SetupTCPClientSocket(addrBuffer, Date_Port);
+    if (Date_Sock < 0)
+        User_Error_Exit("SetupTCPClientSocket(Date_Sock) faild!", "Unable to connect");
 
     //使用流包装套接字
-    FILE *str = fdopen(clntSocket, "r+");
-    if(str == NULL)
-        System_Error_Exit("fdopen(clntSocket) faild");
+    FILE *Date_Str = fdopen(Date_Sock, "r+");
+    if(Date_Str == NULL)
+        System_Error_Exit("fdopen(Date_Sock) faild");
 
     //创建一个临时文件用于保存客户端命令在服务端执行的结果
     if((tmp_fp = fopen(TMP_Path,"w+")) == NULL)
@@ -60,12 +82,12 @@ void HandleTCPClient(int clntSocket)
 
     while(numBytesRcved > 0)
     {
-        numBytesRcved = Recv_Messege(str, Cmd_Buffer); //获取指令
+        numBytesRcved = Recv_Messege(Cmd_Str, Cmd_Buffer); //获取指令
         //链接断开
         if(numBytesRcved == 0)
         {
             Get_Peer_Name(clntSocket);
-            printf("Connection disconneted\n");
+            printf(" Connection disconneted\n");
             break;
         }
         strcpy(Cmd, Cmd_Buffer);
@@ -74,15 +96,25 @@ void HandleTCPClient(int clntSocket)
 
         if(strcmp(Parameter[0],"down") == 0)  //执行用户命令
         {
-            int Send_Bytes = Send_File(str, Parameter[1]);
-            printf("Send %d Bytes\n", Send_Bytes);
+            //printf("Recived dowm cmd[%s %s %s]\n", Parameter[0], Parameter[1], Parameter[2]);
+            int Send_Bytes = Send_File(Date_Str, Parameter[1]);
+            if(Send_Bytes == -1)
+                Send_Messege(Cmd_Str,"Target file not exit in server !");
+            else if(Send_Bytes == -2)
+                Send_Messege(Cmd_Str,"Read Target file error !");
+            else
+            {
+                printf("Send %d Bytes\n", Send_Bytes);
+                printf("send Complete\n");
+            }
         }
         else  //执行系统命令
         {
             strcat(Cmd,CMD_TMP_PATH);    //命令包装，加入输出重定向到文件
             system(Cmd);                 //执行命令
-            Send_File(str, TMP_Path);       //传输保存有命令执行结果的文件
+            Send_File(Cmd_Str, TMP_Path);       //传输保存有命令执行结果的文件
         }
     }
-    fclose(str); //flushes stream and closes socket
+    fclose(Cmd_Str); //flushes stream and closes socket
+    fclose(Date_Str);
 }

@@ -17,7 +17,7 @@ typedef struct TransInfo
     uint8_t data[BUFFER_SIZE];
 }TransInfo;
 
-
+size_t Compute_TransInfo_Size(TransInfo *v);
 size_t Encode(TransInfo *v, uint8_t *outbuf, size_t bufsize, uint16_t head);
 Bool Decode(TransInfo *v, uint8_t *inbuf, const size_t msize);
 int GetNextMsg(FILE *in, uint8_t *buf, size_t buffsize);
