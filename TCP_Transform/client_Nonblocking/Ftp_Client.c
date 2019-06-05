@@ -1,3 +1,4 @@
+//down ../../../tmp/1.flac ./temp/1.flac
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -50,8 +51,8 @@ int main(int argc, char *argv[])
     close(Server_Sock);
 
     //设置为非阻塞
-    //if (fcntl(Date_Sock, F_SETFL, O_NONBLOCK) < 0)
-        //System_Error_Exit("Unable to put Date_Sock into non-blocking");
+    if (fcntl(Date_Sock, F_SETFL, O_NONBLOCK) < 0)
+        System_Error_Exit("Unable to put Date_Sock into non-blocking");
 
     //使用流包装套接字
     FILE *Date_Str = fdopen(Date_Sock, "r+");
@@ -64,6 +65,7 @@ int main(int argc, char *argv[])
     char Parameter[3][SERVICE_LEN];
     char Messege[MAX_WIRE_SIZE];
     int Recv_File_Bytes = 0, Recv_Msg_Bytes = 0;
+    int count = 0;
 
     while(1)
     {   
@@ -81,41 +83,55 @@ int main(int argc, char *argv[])
             if(Cmd_sta == True)
             {
                 Send_Messege(Cmd_Str, Cmd);
-                Recv_File_Bytes = Recv_File(Date_Str, Parameter[2]);
-                /*
-                Recv_File_Bytes = 0;
+                //Recv_File_Bytes = Recv_File(Date_Str, Parameter[2]);
                 while(1)
                 {
-                    if(Recv_File_Bytes != -2)
-                        Recv_File_Bytes = Recv_File(Date_Str, Parameter[2]);
-                    if(Recv_File_Bytes == -1)
+                    count++;
+                    Recv_File_Bytes = Recv_File(Date_Str, Parameter[2]);
+                    if(Recv_File_Bytes == FREAD_ERROR)
                     {
                         if(errno != EWOULDBLOCK)
                         {
-                            System_Error("Recv_File accept faild!");
+                            System_Error("Recv_File_Bytes : accept faild!");
                             break;
                         }
+                        printf("try reading....\n");
                     }
                     else if(Recv_File_Bytes > 0)
                         break;
-
+                    else if(Recv_File_Bytes == DECODE_MATCHING_ERROR)
+                    {
+                        printf("Recv_File_Bytes MATCHING_ERROR\n");
+                        break;
+                    }
+                    else
+                        break;
+                        
+                    /*
                     Recv_Msg_Bytes = Recv_Messege(Cmd_Str, Messege);
-                    if(Recv_Msg_Bytes == -1)
+                    if(Recv_Msg_Bytes == FREAD_ERROR)
                     {
                         if(errno != EWOULDBLOCK)
                         {
-                            System_Error("Recv_Messege accept faild!");
+                            System_Error("accept faild!");
                             break;
                         }
                     }
-                    else if(Recv_Msg_Bytes > 0)
+                    else if(Recv_Msg_Bytes > 1)
                     {
                         printf("Messege from server: %s\n", Messege);
+                        break; 
+                    }
+                    else if(Recv_Msg_Bytes == DECODE_MATCHING_ERROR)
+                    {
+                        printf("Recv_Msg_Bytes MATCHING_ERROR\n");
                         break;
                     }
-                
+                    else
+                        break;
+                        */
                 }
-                */
+                printf("count = %d\n",count);
             }
             else
                 printf("Download Parameter is wrong : down <source> <target>\n");
@@ -126,7 +142,7 @@ int main(int argc, char *argv[])
             while(1)
             {
                 Recv_File_Bytes = Recv_File(Cmd_Str, TMP_Path);
-                if(Recv_File_Bytes == -1)
+                if(Recv_File_Bytes == FREAD_ERROR)
                 {
                     if(errno != EWOULDBLOCK)
                     {
@@ -137,6 +153,7 @@ int main(int argc, char *argv[])
                 else if(Recv_File_Bytes > 0)
                     break;
             }
+            printf("Cmd_Result_file_size: %d\n",Recv_File_Bytes);
             system("cat ./temp/temp");
         }
     }

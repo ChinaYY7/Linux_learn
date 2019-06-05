@@ -3,6 +3,7 @@
 #include "Deal_Error.h"
 #include "Ftp_ServerUtility.h"
 #include "Trans_Protocol.h"
+#include <sys/time.h> 
 
 //获取服务端配置
 void Get_Server_Config(char *service, int argc, char **argv)
@@ -31,11 +32,17 @@ void Get_Server_Config(char *service, int argc, char **argv)
 //清理僵尸进程
 void Clean_Zombies_Process(int *childProcCount)
 {
-    int processID = waitpid((pid_t) -1, NULL, WNOHANG);//Non=blocking wait
-    if(processID < 0)
-        System_Error_Exit("waitpid() faild");
-    else if(processID > 0)
-        (*childProcCount)--;
+    int processID;
+    while(1)
+    {
+        processID = waitpid((pid_t) -1, NULL, WNOHANG);//Non=blocking wait
+        if(processID < 0)
+            System_Error_Exit("waitpid() faild");
+        else if(processID > 0)
+            (*childProcCount)--;
+        else
+            break;
+    }  
 }
 
 void HandleTCPClient(int clntSocket)
@@ -43,6 +50,9 @@ void HandleTCPClient(int clntSocket)
     char Cmd_Buffer[BUFFSIZE], Cmd[BUFFSIZE];
     ssize_t numBytesRcved = 1;
     static FILE *tmp_fp;
+
+    struct timeval start,finish;
+    double speed,Complate_time;
     
     char *token;
     char Parameter[3][SERVICE_LEN];
@@ -56,7 +66,7 @@ void HandleTCPClient(int clntSocket)
     char Date_Port[6];
     numBytesRcved = Recv_Messege(Cmd_Str, Date_Port); //获取指令
     //链接断开
-    if(numBytesRcved == 0)
+    if(numBytesRcved == FREAD_EOF)
     {
         Get_Peer_Name(clntSocket);
         printf(" Connection disconneted\n");
@@ -84,7 +94,7 @@ void HandleTCPClient(int clntSocket)
     {
         numBytesRcved = Recv_Messege(Cmd_Str, Cmd_Buffer); //获取指令
         //链接断开
-        if(numBytesRcved == 0)
+        if(numBytesRcved == FREAD_EOF)
         {
             Get_Peer_Name(clntSocket);
             printf(" Connection disconneted\n");
@@ -97,14 +107,19 @@ void HandleTCPClient(int clntSocket)
         if(strcmp(Parameter[0],"down") == 0)  //执行用户命令
         {
             //printf("Recived dowm cmd[%s %s %s]\n", Parameter[0], Parameter[1], Parameter[2]);
+            gettimeofday(&start,NULL);
+            sleep(1);
             int Send_Bytes = Send_File(Date_Str, Parameter[1]);
-            if(Send_Bytes == -1)
+            if(Send_Bytes == FOPEN_ERROR)
                 Send_Messege(Cmd_Str,"Target file not exit in server !");
-            else if(Send_Bytes == -2)
+            else if(Send_Bytes == FWRITE_ERROR)
                 Send_Messege(Cmd_Str,"Read Target file error !");
             else
             {
-                printf("Send %d Bytes\n", Send_Bytes);
+                gettimeofday(&finish,NULL);
+                Complate_time = (double)((finish.tv_sec-start.tv_sec) * 1000000 + (finish.tv_usec-start.tv_usec)) / 1000000;
+                speed = Send_Bytes / 1024 / 1024 / Complate_time; //MB/S
+                printf("\nSend %d Bytes and Speed: %.2f MB/s\n", Send_Bytes, speed);
                 printf("send Complete\n");
             }
         }

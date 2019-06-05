@@ -1,3 +1,4 @@
+#include <sys/epoll.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -31,32 +32,48 @@ int main(int argc, char *argv[])
     struct sockaddr_storage clntAddr;
     socklen_t clntAddrLen = sizeof(clntAddr);
 
+    int epfd,nfds;
+    struct epoll_event ev,events[5]; //ev用于注册事件，数组用于返回要处理的事件
+    epfd = epoll_create(1); //只需要监听一个描述符——标准输入
+    ev.data.fd = servSock;
+    ev.events = EPOLLIN | EPOLLET; //监听读状态同时设置ET模式
+    epoll_ctl(epfd, EPOLL_CTL_ADD, servSock, &ev); //注册epoll事件
+
     while(1)
     {
-        clntSock = accept(servSock, (struct sockaddr *)&clntAddr, &clntAddrLen);
-        if(clntSock < 0)
+        nfds = epoll_wait(epfd, events, 5, -1);
+        printf("Detecte event: %d\n",nfds);
+        for(int i = 0; i < nfds; i++)
         {
-            if(errno != EWOULDBLOCK)
-                System_Error_Exit("accept faild!");
-        }
-        else
-        {
-            //创建子进程处理到来的连接
-            processID = fork();
-            if(processID < 0)
-                System_Error_Exit("fork() faild");
-            else if(processID == 0)
+            if(events[i].data.fd == servSock)
             {
-                close(servSock);
-                printf("\nProcessID: %d\nClient->Server: ",getpid());
-                Get_Peer_Name(clntSock);
-                HandleTCPClient(clntSock);
-                exit(0);
+                while (1)
+                {
+                    clntSock = accept(servSock, (struct sockaddr *)&clntAddr, &clntAddrLen);
+                    if(clntSock < 0)
+                    {
+                        if(errno != EWOULDBLOCK)
+                            System_Error_Exit("accept faild!");
+                        else
+                            break;
+                    }
+                    processID = fork();
+                    if(processID < 0)
+                        System_Error_Exit("fork() faild");
+                    else if(processID == 0)
+                    {
+                        close(servSock);
+                        printf("\nProcessID: %d\nClient->Server: ",getpid());
+                        Get_Peer_Name(clntSock);
+                        HandleTCPClient(clntSock);
+                        exit(0);
+                    }
+                    close(clntSock);
+                    childProcCount++;
+                    if(childProcCount > 0)
+                        Clean_Zombies_Process(&childProcCount);
+                }
             }
-            close(clntSock);
-            childProcCount++;
         }
-        if(childProcCount > 0)
-            Clean_Zombies_Process(&childProcCount);
     }
 }

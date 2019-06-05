@@ -7,6 +7,15 @@
 #define FILE_HEAD 0X5400
 #define MESSEGE_HEAD 0X5500
 
+#define FREAD_ERROR -1
+#define FWRITE_ERROR -1
+#define BUFSIZE_TOO_LONG -2
+#define FREAD_EOF 0
+#define FREAD_ELSE -2
+#define DECODE_MATCHING_ERROR -3
+#define FOPEN_ERROR -4
+#define NOT_MATCHING -5
+
 #define DELIM " "
 
 typedef struct TransInfo

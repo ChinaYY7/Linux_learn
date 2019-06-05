@@ -65,86 +65,95 @@ Bool Decode(TransInfo *v, uint8_t *inbuf, const size_t msize)
         return False;
 }
 
+//读取一帧数据异常判断
+int GetNextMsg_Return_Value(FILE *in, const char *str)
+{
+    if(feof(in)) 
+    {
+        printf("read %s disconnect\n", str);
+        System_Error_Exit("fread()");
+        return FREAD_EOF;
+    }    
+    else if(ferror(in))
+    {
+        //printf("read %s error\n", str);
+        //System_Error("fread(%s)", str);
+        return FREAD_ERROR;
+    }
+    else
+    {
+        return FREAD_ELSE;
+    }
+}
 //读取一帧信息
-//若接收缓冲区有数据且可用读取成功返回读取的字节
-//若缓存区没有数据或者数据暂时不可用，阻塞，直到有数据
-//若连接断开，将报错，并返回0
-//读取出错返回-1， buf过小返回最终读取的字节数的负数
 int GetNextMsg(FILE *in, uint8_t *buf, size_t buffsize)
 {
     uint16_t msize = 0;
     uint16_t extra = 0;
     uint16_t fread_count;
+    static uint8_t read_msize_sta = 1, read_buf_sta = 0;
+    static int read_count = 0; 
     
     int rnt;  
+    
+    if(read_msize_sta)
+    {
+        //printf("\nread msize\n");
+        rnt = fread(&msize, sizeof(uint16_t), 1, in);
+        read_count++;
+        msize = ntohs(msize);
+        //printf("rnt = %d, msize(%d) = %d\n",rnt, read_count,msize);
+        if(rnt != 1)
+        {
+            //printf("fread misze rnt = %d, errno = %d ", rnt, errno);
+            return GetNextMsg_Return_Value(in, "msize");
+        }
 
-    rnt = fread(&msize, sizeof(uint16_t), 1, in);
-    if(rnt != 1)
-    {
-        printf("fread misze rnt = %d, errno = %d ", rnt, errno);
-        if(feof(in)) 
-        {
-            printf("read misze disconnect\n");
-            System_Error("fread(msize)");
-            return 0;
-        }    
-        else
-        {
-            printf("read misze error\n");
-            System_Error("fread(msize)");
-            return -1;
-        }
-            
-    }
-    
-    msize = ntohs(msize);
-    
-    if(msize > buffsize)
-    {
-        printf("msize(%d) > buffsize(%d)", msize, buffsize);
-        extra = msize - buffsize;
-        msize = buffsize;
-    }
+        read_msize_sta = 0;
+        read_buf_sta = 1;
 
-    if((fread_count = fread(buf, sizeof(uint8_t), msize, in)) != msize)
-    {
-        printf("fread buf rnt = %d, errno = %d ", rnt, errno);
-        if(feof(in)) 
+        if(msize > buffsize)
         {
-            printf("read buf disconnect\n");
-            System_Error("fread(buf)");
-            return 0;
+            printf("msize(%d) > buffsize(%ld)", msize, buffsize);
+            extra = msize - buffsize;
+            msize = buffsize;
+        }
+    }
+    if(read_buf_sta)
+    {
+       // printf("read buf\n");
+        rnt = fread(buf, sizeof(uint8_t), msize, in);
+        //printf("rnt = %d\n",rnt);
+        if(rnt < msize)
+        {
+            while(GetNextMsg_Return_Value(in, "buf") == FREAD_ERROR)
+            {
+                buf+=rnt;
+                msize = msize - rnt;
+                rnt = fread(buf, sizeof(uint8_t), msize, in);
+                //printf("rnt = %d\n",rnt);
+                if(rnt == msize)
+                    break;
+            }
+            //printf("fread buf rnt = %d, errno = %d ", rnt, errno);
+        }
+
+        read_buf_sta = 0;
+        read_msize_sta = 1;
+        
+        if(extra > 0)
+        {
+            uint8_t waste[BUFFSIZE];
+            rnt = fread(buf, sizeof(uint8_t), extra, in);
+            if(rnt != extra)
+            {
+                return GetNextMsg_Return_Value(in, "waste");
+            }
+            return -(msize + extra + sizeof(uint16_t));
         }
         else
-        {
-            printf("read buf error\n");
-            System_Error("fread(buf)");
-            return -1;
-        }
+            return rnt + sizeof(uint16_t);
     }
-    
-    if(extra > 0)
-    {
-        uint8_t waste[BUFFSIZE];
-        if(fread(waste, sizeof(uint8_t), extra, in) != extra)
-        {
-            if(feof(in)) 
-            {
-                printf("read waste disconnect\n");
-                System_Error("fread(buf)");
-                return 0;
-            }
-            else
-            {
-                printf("read waste error\n");
-                System_Error("fread(buf)");
-                return -1;
-            }
-        }
-        return -(msize + extra + sizeof(uint16_t));
-    }
-    else
-        return fread_count + sizeof(uint16_t);
 }
 
 //写一帧信息
@@ -154,16 +163,18 @@ int GetNextMsg(FILE *in, uint8_t *buf, size_t buffsize)
 int PutMsg(const uint8_t *buf, size_t msgsize, FILE *out)
 {
     if(msgsize > __UINT16_MAX__)
-        User_Error_Exit("bufsize too long", "should < __UINT16_MAX__");
+    {
+        User_Error("bufsize too long", "should < __UINT16_MAX__");
+        return BUFSIZE_TOO_LONG;
+    }
     
     uint16_t payloadsize = htons(msgsize);
     
     if((fwrite(&payloadsize, sizeof(uint16_t), 1, out) != 1) || (fwrite(buf, sizeof(uint8_t), msgsize, out) != msgsize))
     {
         System_Error("fwrite(payloadsize or buf)");
-        return 0;
+        return FWRITE_ERROR;
     }
-        
     
     fflush(out);
 
@@ -185,22 +196,20 @@ int Trans_Send(FILE *out, TransInfo *v, uint16_t head)
 int Trans_Recv(FILE *in, TransInfo *v)
 {
     uint8_t buf[MAX_WIRE_SIZE];
+
     //读取接收缓冲区数据
     int Recv_size = GetNextMsg(in,buf,MAX_WIRE_SIZE);
-    
-    if(Recv_size == -1 || Recv_size == 0)
+    if(Recv_size < 1)
         return Recv_size;
-    else if(Recv_size < 0)
-    {
-        User_Error("GetNextMsg error", "Date_size larger than bufsize");
-        return Recv_size;
-    }
         
      //数据解码
     Bool Decode_sta = Decode(v, buf, MAX_WIRE_SIZE);
     if(!Decode_sta)
-        User_Error_Exit("Decode error", "Head is not matching");
-
+    {
+        User_Error("Decode error", "Head is not matching");
+        return DECODE_MATCHING_ERROR;
+    }
+    
     return Recv_size;
 }
 
@@ -227,14 +236,12 @@ int Recv_Messege(FILE *in, char *string)
     memset(&vi, 0, sizeof(vi));
 
     int Recv_size = Trans_Recv(in, &vi);
-    if(Recv_size == 0 || Recv_size == -1)
+    if(Recv_size < 1)
         return Recv_size;
-    else if(Recv_size < 0)
-        return -2;
     if(vi.header == MESSEGE_HEAD)
         strcpy(string, vi.data);
     else
-        return -3;
+        return NOT_MATCHING;
     
     return Recv_size;
 }
@@ -251,7 +258,7 @@ uint64_t Send_File(FILE *out, const char *file_path)
     if((file_fp = fopen(file_path,"r")) == NULL)
     {
         User_Error("fopen() error", "file not exit");
-        return -1;
+        return FOPEN_ERROR;
     }
         
     while(1)
@@ -265,12 +272,12 @@ uint64_t Send_File(FILE *out, const char *file_path)
             if(ferror(file_fp))
             {
                 User_Error("fread(file_fp)","error");
-                return -2;
+                return FREAD_ERROR;
             }
         }
         vi.date_size = ReadCount;
         Send_File_Bytes += Trans_Send(out, &vi, FILE_HEAD);
-        printf("send %ld Bytes\n", Send_File_Bytes);
+        //printf("send %ld Bytes\n", Send_File_Bytes);
         //读到文件尾
         if(feof(file_fp))
             break;
@@ -288,21 +295,37 @@ uint64_t Recv_File(FILE *in, const char *file_path)
     TransInfo vi;
     uint64_t Recv_File_Bytes = 0;
     int Recv_Bytes = 0;
+    static uint8_t File_Creat_Sta = 1;
 
     memset(&vi, 0, sizeof(vi));
-    //以截断、读写、不存在则创建、方式打开文件，该文件用以接收服务端返回的指令执行结果
-    if((file_fp = fopen(file_path,"w+")) == NULL)
+
+    if(File_Creat_Sta)
     {
-        User_Error("fopen() error", "create file failed");
-        return -2;
+        //以截断、读写、不存在则创建、方式打开文件，该文件用以接收服务端返回的指令执行结果
+        if((file_fp = fopen(file_path,"w+")) == NULL)
+        {
+            User_Error("fopen() error", "create file failed");
+            return FOPEN_ERROR;
+        }
+        printf("Create file.....\n");
+        File_Creat_Sta = 0;
     }
+    else
+    {
+        if((file_fp = fopen(file_path,"r+")) == NULL)
+        {
+            User_Error("fopen() error", "Open file failed");
+            return FOPEN_ERROR;
+        }
+    }
+    
     while(1)
     {
         Recv_Bytes = Trans_Recv(in, &vi);
-        if(Recv_Bytes == -1)
+        if(Recv_Bytes < 1)
         {
             fclose(file_fp);
-            return -1;
+            return Recv_Bytes;
         }
 
         Recv_File_Bytes+=Recv_Bytes;
@@ -318,9 +341,11 @@ uint64_t Recv_File(FILE *in, const char *file_path)
                 break;
         }
         else
-            return -3;
+            return NOT_MATCHING;
     }
     fclose(file_fp);
+    printf("finlish file.....\n");
+    File_Creat_Sta = 1;
     return Recv_File_Bytes;
 }
 
