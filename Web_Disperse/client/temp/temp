@@ -1,0 +1,10 @@
+total 16
+-rwxrwxrwx 1 mr_yy mr_yy 1820 Mar 26 15:41 Ftp_Server.c
+-rwxrwxrwx 1 mr_yy mr_yy  136 Mar 26 12:39 Ftp_Server.sh
+-rwxrwxrwx 1 mr_yy mr_yy 3971 Mar 28 18:34 Ftp_ServerUtility.c
+-rwxrwxrwx 1 mr_yy mr_yy  396 Mar 26 15:42 Ftp_ServerUtility.h
+drwxrwxrwx 1 mr_yy mr_yy 4096 Mar 28 18:34 bin
+drwxrwxrwx 1 mr_yy mr_yy 4096 Mar 18 22:46 config
+-rwxrwxrwx 1 mr_yy mr_yy 1081 Mar 25 19:39 makefile
+drwxrwxrwx 1 mr_yy mr_yy 4096 Mar 28 18:34 object
+drwxrwxrwx 1 mr_yy mr_yy 4096 Mar 28 18:27 temp
