@@ -1,4 +1,4 @@
-//down ../../../tmp/1.flac ./temp/1.flac
+#include <sys/epoll.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -13,166 +13,73 @@ int main(int argc, char *argv[])
     char server[SERVER_LEN], service[SERVICE_LEN];
     
     //从命令行或者配置文件获取服务器地址和端口号
-    Get_Client_Config(server, service, argc, argv);
+    Get_Server_Config(server, service, argc, argv);
     
     //创建子服务器-主服务器连接套接字
-    printf("\nServer_Slave->Server_Master: ");
-    int sock = SetupTCPClientSocket(server, service);
-    if (sock < 0)
-        User_Error_Exit("SetupTCPClientSocket(sock) faild!", "Unable to connect");
+    printf("\nSlave_Server->Master_Server: ");
+    int Master_sock = SetupTCPClientSocket(server, service);
+    if (Master_sock < 0)
+        User_Error_Exit("SetupTCPClientSocket(Master_sock) faild!", "Unable to connect");
 
     //设置为非阻塞
-    if (fcntl(sock, F_SETFL, O_NONBLOCK) < 0)
-        System_Error_Exit("Unable to put sock into non-blocking");
+    if (fcntl(Master_sock, F_SETFL, O_NONBLOCK) < 0)
+        System_Error_Exit("Unable to put Master_sock into non-blocking");
+
+    //创建子服务器监听浏览器的TCP套接字
+    char Browser_Port[6];
+    sprintf(Browser_Port,"%d",getpid() % 5000 + 6000);
+    int Browser_Sock_lisen = SetupTCPServerSocket(Browser_Port);  
+    if(Browser_Sock_lisen < 0)
+        System_Error_Exit("SetupTCPServerSocket(Browser_Sock_lisen) faild");
+
+    //设置为非阻塞
+    if (fcntl(Browser_Sock_lisen, F_SETFL, O_NONBLOCK) < 0)
+        System_Error_Exit("Unable to put Browser_Sock_lisen into non-blocking");
 
     //使用流包装套接字
-    FILE *Cmd_Str = fdopen(sock, "r+");
-    if(Cmd_Str == NULL)
+    FILE *Master_Str = fdopen(Master_sock, "r+");
+    if(Master_Str == NULL)
         System_Error_Exit("fdopen() faild");
 
     //给服务器传递连接的端口
-    char Date_Port[6];
-    sprintf(Date_Port,"%d",getpid() % 5000 + 6000);
-    printf("Date_Port = %s\n",Date_Port);
-    Send_Messege(Cmd_Str, Date_Port);
+    Send_Messege(Master_Str, Browser_Port);
 
-    //创建子服务器监听TCP套接字
+    int Browser_Sock;
     struct sockaddr_storage clntAddr;
     socklen_t clntAddrLen = sizeof(clntAddr);
 
-    int Server_Sock = SetupTCPServerSocket(Date_Port);  
-    if(Server_Sock < 0)
-        System_Error_Exit("SetupTCPServerSocket(Server_Sock) faild");
+    int epfd,nfds;
+    struct epoll_event ev,events[20];                       //ev用于注册事件，数组用于返回要处理的事件
+    epfd = epoll_create(1);                                 //只需要监听一个描述符——标准输入
 
-    printf("Chrom->Client: ");
-    int Date_Sock = accept(Server_Sock, (struct sockaddr *)&clntAddr, &clntAddrLen);
-    Get_Peer_Name(Date_Sock);
-    printf("\n");
-
-    //设置为非阻塞
-    if (fcntl(Date_Sock, F_SETFL, O_NONBLOCK) < 0)
-        System_Error_Exit("Unable to put Date_Sock into non-blocking");
-
-    //使用流包装套接字
-    FILE *Date_Str = fdopen(Date_Sock, "r+");
-    if(Date_Str == NULL)
-        System_Error_Exit("fdopen(Date_Sock) faild");
-
-
-    char Cmd_buffer[BUFFSIZE], Cmd[BUFFSIZE];
-    char *token;
-    char Parameter[3][SERVICE_LEN];
-    char Messege[MAX_WIRE_SIZE];
-    int Recv_File_Bytes = 0, Recv_Msg_Bytes = 0;
-    int count = 0;
+    ev.data.fd = Browser_Sock_lisen;
+    ev.events = EPOLLIN | EPOLLET;                          //监听读状态同时设置ET模式
+    epoll_ctl(epfd, EPOLL_CTL_ADD, Browser_Sock_lisen, &ev);  //注册epoll事件
 
     while(1)
-    { 
-        char buffer[1024];
-        sprintf(buffer, "HTTP/1.0 200 OK\r\n");
-        // strcat(buf, "Server: hoohackhttpd/0.1.0\r\n");
-        strcat(buffer, "Content-Type: text/html\r\n\r\n");
-        strcat(buffer, "Hello This is slave\r\n\r\n");
-    
-        //count=TCP_nSend(Date_Sock, buffer, strlen(buffer));
-        if((fwrite(buffer, sizeof(char), strlen(buffer), Date_Str) != strlen(buffer)))
+    {
+        nfds = epoll_wait(epfd, events, 20, -1);
+        //printf("Detecte event: %d\n",nfds);
+        for(int i = 0; i < nfds; i++)
         {
-            System_Error("fwrite(buffer)");
-            break;
-        }
-        break;
-        /*
-        //输入并处理命令
-        printf("\nftp@cmd:   ");
-        fgets(Cmd_buffer, BUFFSIZE, stdin);
-        size_t cmdStringLen = strlen(Cmd_buffer);
-        Cmd_buffer[cmdStringLen - 1] = '\0'; //fgets会将输入的回车加入字符串，需要消除掉
-
-        strcpy(Cmd, Cmd_buffer);
-
-        Bool Cmd_sta = Deal_Cmd(Cmd_buffer, Parameter, 3);
-        if(strcmp(Parameter[0],"down") == 0)
-        {
-            if(Cmd_sta == True)
+            if(events[i].data.fd == Browser_Sock_lisen)     //浏览器请求连接
             {
-                Send_Messege(Cmd_Str, Cmd);
-                //Recv_File_Bytes = Recv_File(Date_Str, Parameter[2]);
-                while(1)
-                {
-                    count++;
-                    Recv_File_Bytes = Recv_File(Date_Str, Parameter[2]);
-                    if(Recv_File_Bytes == FREAD_ERROR)
-                    {
-                        if(errno != EWOULDBLOCK)
-                        {
-                            System_Error("Recv_File_Bytes : accept faild!");
-                            break;
-                        }
-                        printf("try reading....\n");
-                    }
-                    else if(Recv_File_Bytes > 0)
-                        break;
-                    else if(Recv_File_Bytes == DECODE_MATCHING_ERROR)
-                    {
-                        printf("Recv_File_Bytes MATCHING_ERROR\n");
-                        break;
-                    }
-                    else
-                        break;
-                        
-                    /*
-                    Recv_Msg_Bytes = Recv_Messege(Cmd_Str, Messege);
-                    if(Recv_Msg_Bytes == FREAD_ERROR)
-                    {
-                        if(errno != EWOULDBLOCK)
-                        {
-                            System_Error("accept faild!");
-                            break;
-                        }
-                    }
-                    else if(Recv_Msg_Bytes > 1)
-                    {
-                        printf("Messege from server: %s\n", Messege);
-                        break; 
-                    }
-                    else if(Recv_Msg_Bytes == DECODE_MATCHING_ERROR)
-                    {
-                        printf("Recv_Msg_Bytes MATCHING_ERROR\n");
-                        break;
-                    }
-                    else
-                        break;
-                        */
-                /*
-                }
-                printf("count = %d\n",count);
-            }
-            else
-                printf("Download Parameter is wrong : down <source> <target>\n");
-        }
-        else
-        {
-            Send_Messege(Cmd_Str, Cmd);
-            while(1)
-            {
-                Recv_File_Bytes = Recv_File(Cmd_Str, TMP_Path);
-                if(Recv_File_Bytes == FREAD_ERROR)
+                Browser_Sock = accept(Browser_Sock_lisen, (struct sockaddr *)&clntAddr, &clntAddrLen);
+                if(Browser_Sock < 0)
                 {
                     if(errno != EWOULDBLOCK)
                     {
-                        System_Error("accept faild!");
-                        break;
+                        System_Error("Browser_Sock accept faild!");
+                        continue;
                     }
                 }
-                else if(Recv_File_Bytes > 0)
-                    break;
+
+                Get_Peer_Name(Browser_Sock);
+                printf(" Browser->Client\n");
+                Reponse_Browser(Browser_Sock, Browser_Port);              //回应浏览器
             }
-            printf("Cmd_Result_file_size: %d\n",Recv_File_Bytes);
-            system("cat ./temp/temp");
         }
-        */
     }
-    fclose(Cmd_Str);
-    fclose(Date_Str);
+    fclose(Master_Str);
     return 0;
 } 

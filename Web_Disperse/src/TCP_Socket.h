@@ -11,6 +11,7 @@ int SetupTCPServerSocket(const char *service);
 int SetupTCPClientSocket(const char *host, const char *service);
 int AcceptTCPConnection(int servSock);
 int Get_Address(int sock_fd, char *Buffer);
+int Get_Address_Local(int sock_fd, char *Buffer);
 void PrintSockAddress(const struct sockaddr *address, FILE *stream);
 int Get_Sock_Name(int sock_fd);
 int Get_Peer_Name(int sock_fd);

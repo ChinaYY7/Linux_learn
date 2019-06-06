@@ -5,8 +5,22 @@
 #include "Trans_Protocol.h"
 #include <sys/time.h> 
 static char buffer[1024];
+
+
 static Slave_Server_Address Slave_Server_Address_Tbl[TBL_SIZE];
 
+//初始化服务器地址表
+void Init_Slave_Server_Address_Tbl(void)
+{
+    int i;
+    for(i = 0; i < TBL_SIZE; i++)
+    {
+        Slave_Server_Address_Tbl[i].Enable = False;
+        Slave_Server_Address_Tbl[i].load = 0;
+    }
+}
+
+//将子服务器地址插入服务器地址表
 int Insert_Slave_Server_Address(const char *addrBuffer, int Sock)
 {
     int i;
@@ -17,6 +31,9 @@ int Insert_Slave_Server_Address(const char *addrBuffer, int Sock)
             strcpy(Slave_Server_Address_Tbl[i].address,addrBuffer);
             Slave_Server_Address_Tbl[i].Sock = Sock;
             Slave_Server_Address_Tbl[i].Enable = True;
+            Slave_Server_Address_Tbl[i].load = 0;
+            //printf("Sock(%d) Insert Slave_Server_Address_Tbl[%d]\n", Sock, i);
+            break;
         }     
     }
     if(i == TBL_SIZE)
@@ -24,19 +41,24 @@ int Insert_Slave_Server_Address(const char *addrBuffer, int Sock)
     return 0;
 }
 
+//将子服务器地址从服务器地址表中删除
 int Delete_Slave_Server_Address(int Sock)
 {
     int i;
     for(i = 0; i < TBL_SIZE; i++)
     {
         if(Slave_Server_Address_Tbl[i].Sock == Sock)
+        {
             Slave_Server_Address_Tbl[i].Enable = False;
+            //printf("Sock(%d) be delete from Slave_Server_Address_Tbl[%d]\n", Sock, i);
+        } 
     }
     if(i == TBL_SIZE)
         return -1;
     return 0;
 }
 
+//判断服务器地址表是否为空
 int Slave_Server_Address_Empty(void)
 {
     int i;
@@ -48,15 +70,51 @@ int Slave_Server_Address_Empty(void)
     return 1;
 }
 
+
+//从服务器地址表中选择一个服务器地址
 int Select_Server_Address(void)
 {
     int i;
+    static int min_load = 1;
+    int select = -1;
     for(i = 0; i < TBL_SIZE; i++)
     {
         if(Slave_Server_Address_Tbl[i].Enable == True)
-            return i;    
+        {
+            if(Slave_Server_Address_Tbl[i].load <= min_load)
+            {
+                min_load = Slave_Server_Address_Tbl[i].load;
+                select = i;
+            }
+        }   
     }
-    return -1;
+    if(select < 0)
+        return -1;
+    Slave_Server_Address_Tbl[select].load++;
+    min_load++;
+    printf("min_load = %d\n",min_load);
+    return select;
+}
+
+//屏蔽SIGPIPE信号
+int Shield_SIGPIPE(void)
+{
+    struct sigaction handler;
+
+    handler.sa_handler = SIG_IGN;
+    if(sigfillset(&handler.sa_mask) < 0)
+    {
+        System_Error("sigfillset() failed");
+        return -1;
+    } 
+    handler.sa_flags = 0;
+    if(sigaction(SIGPIPE,&handler, 0) < 0)
+    {
+        System_Error("sigaction() faild for SIGPIPE");
+        return -2;
+    }
+    
+    return 0;
 }
 
 //获取服务端配置
@@ -105,7 +163,8 @@ void Clean_Zombies_Process(int *childProcCount)
     }  
 }
 
-void Talk_Slave(int Slave_Sock)
+//与子服务器的通讯
+int Talk_Slave(int Slave_Sock)
 {
     ssize_t numBytesRcved;
     static int First_Sta = 1;
@@ -116,142 +175,63 @@ void Talk_Slave(int Slave_Sock)
     if(Slave_Str == NULL)
         System_Error_Exit("fdopen(Slave_Sock) faild");
 
-    char Date_Port[6];
-    numBytesRcved = Recv_Messege(Slave_Str, Date_Port); //获取指令
+    char Browser_Port[6];
+    numBytesRcved = Recv_Messege(Slave_Str, Browser_Port); //获取指令
     //链接断开
     if(numBytesRcved == FREAD_EOF)
     {
         Get_Peer_Name(Slave_Sock);
-        printf(" Connection disconneted\n");
-        fclose(Slave_Str); //flushes stream and closes socket
+        printf(" Disconnected\n");
         Delete_Slave_Server_Address(Slave_Sock);
-        return;
+        fclose(Slave_Str);//flushes stream and closes socket
+        return -1;
     }
 
     char addrBuffer[INET6_ADDRSTRLEN];
     Get_Address(Slave_Sock, addrBuffer);
     strcat(addrBuffer,":");
-    strcat(addrBuffer,Date_Port);
+    strcat(addrBuffer,Browser_Port);
 
-    printf("The address is: %s\n", addrBuffer);
+    printf("The slave address is: %s\n", addrBuffer);
     Insert_Slave_Server_Address(addrBuffer, Slave_Sock);
-    //fclose(Slave_Str);
+
+    return 0;
 }
 
-void Reponse_Chrom(int Chrom_Sock)
+const char Default_Address[20] = "www.baidu.com";
+
+//回应浏览器的请求
+void Reponse_Browser(int Browser_Sock)
 {
     ssize_t numBytesSent;
 
-    printf("recv chrom request\n");
+    printf("Recevie A Browser's Request\n");
     memset(buffer, 0, sizeof(buffer));
 
     sprintf(buffer, "HTTP/1.1 302 Moved Temporarily\r\n");
     strcat(buffer, "Location: http://");
 
     if(Slave_Server_Address_Empty())
-        strcat(buffer, "www.baidu.com\r\n\r\n");
+    {
+        strcat(buffer, Default_Address);
+        printf("Browser connect to default adress: %s\n",Default_Address);
+    }
     else
     {
         int Select_Num = Select_Server_Address();
-        strcat(buffer, Slave_Server_Address_Tbl[Select_Num].address);
-        printf("Chrom connect to Slave_Server: %s\n", Slave_Server_Address_Tbl[Select_Num].address);
+        if(Select_Num < 0)
+        {
+            printf("Select error\n");
+        }
+        else
+        {
+            strcat(buffer, Slave_Server_Address_Tbl[Select_Num].address);
+            printf("Browser connect to Slave_Server: %s\n", Slave_Server_Address_Tbl[Select_Num].address);
+        }  
+        
     }
     
+    numBytesSent = TCP_nSend(Browser_Sock, buffer, strlen(buffer));
 
-    numBytesSent = TCP_nSend(Chrom_Sock, buffer, strlen(buffer));
-
-    close(Chrom_Sock);
+    close(Browser_Sock);
 }
-
-
-
-/*
-void HandleTCPClient(int clntSocket)
-{
-    char Cmd_Buffer[BUFFSIZE], Cmd[BUFFSIZE];
-    ssize_t numBytesRcved = 1;
-    static FILE *tmp_fp;
-
-    struct timeval start,finish;
-    double speed,Complate_time;
-    
-    char *token;
-    char Parameter[3][SERVICE_LEN];
-    
-    //使用流包装套接字
-    FILE *Cmd_Str = fdopen(clntSocket, "r+");
-    if(Cmd_Str == NULL)
-        System_Error_Exit("fdopen(clntSocket) faild");
-
-    //创建服务端连接客户端的套接字
-    char Date_Port[6];
-    numBytesRcved = Recv_Messege(Cmd_Str, Date_Port); //获取指令
-    //链接断开
-    if(numBytesRcved == FREAD_EOF)
-    {
-        Get_Peer_Name(clntSocket);
-        printf(" Connection disconneted\n");
-        fclose(Cmd_Str); //flushes stream and closes socket
-        return;
-    }
-    printf("\nServer->Client: ");
-    char addrBuffer[INET6_ADDRSTRLEN];
-    Get_Address(clntSocket, addrBuffer);
-    int Date_Sock = SetupTCPClientSocket(addrBuffer, Date_Port);
-    if (Date_Sock < 0)
-        User_Error_Exit("SetupTCPClientSocket(Date_Sock) faild!", "Unable to connect");
-
-    //使用流包装套接字
-    FILE *Date_Str = fdopen(Date_Sock, "r+");
-    if(Date_Str == NULL)
-        System_Error_Exit("fdopen(Date_Sock) faild");
-
-    //创建一个临时文件用于保存客户端命令在服务端执行的结果
-    if((tmp_fp = fopen(TMP_Path,"w+")) == NULL)
-        User_Error_Exit("fopen(TMP_Path) error", "creat temp failed");
-    fclose(tmp_fp);
-
-    while(numBytesRcved > 0)
-    {
-        numBytesRcved = Recv_Messege(Cmd_Str, Cmd_Buffer); //获取指令
-        //链接断开
-        if(numBytesRcved == FREAD_EOF)
-        {
-            Get_Peer_Name(clntSocket);
-            printf(" Connection disconneted\n");
-            break;
-        }
-        strcpy(Cmd, Cmd_Buffer);
-
-        Bool Cmd_sta = Deal_Cmd(Cmd_Buffer, Parameter, 3);
-
-        if(strcmp(Parameter[0],"down") == 0)  //执行用户命令
-        {
-            //printf("Recived dowm cmd[%s %s %s]\n", Parameter[0], Parameter[1], Parameter[2]);
-            gettimeofday(&start,NULL);
-            sleep(1);
-            int Send_Bytes = Send_File(Date_Str, Parameter[1]);
-            if(Send_Bytes == FOPEN_ERROR)
-                Send_Messege(Cmd_Str,"Target file not exit in server !");
-            else if(Send_Bytes == FWRITE_ERROR)
-                Send_Messege(Cmd_Str,"Read Target file error !");
-            else
-            {
-                gettimeofday(&finish,NULL);
-                Complate_time = (double)((finish.tv_sec-start.tv_sec) * 1000000 + (finish.tv_usec-start.tv_usec)) / 1000000;
-                speed = Send_Bytes / 1024 / 1024 / Complate_time; //MB/S
-                printf("\nSend %d Bytes and Speed: %.2f MB/s\n", Send_Bytes, speed);
-                printf("send Complete\n");
-            }
-        }
-        else  //执行系统命令
-        {
-            strcat(Cmd,CMD_TMP_PATH);    //命令包装，加入输出重定向到文件
-            system(Cmd);                 //执行命令
-            Send_File(Cmd_Str, TMP_Path);       //传输保存有命令执行结果的文件
-        }
-    }
-    fclose(Cmd_Str); //flushes stream and closes socket
-    fclose(Date_Str);
-}
-*/

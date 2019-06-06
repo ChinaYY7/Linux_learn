@@ -189,12 +189,45 @@ void PrintSockAddress(const struct sockaddr *address, FILE *stream)
     //fputc('\n',stdout);
 }
 
-//获取IP地址
+//获取连接端IP地址
 int Get_Address(int sock_fd, char *Buffer)
 {
     struct sockaddr_storage localAddr;
     socklen_t addrSize = sizeof(localAddr);
     if(getpeername(sock_fd, (struct sockaddr *)&localAddr,&addrSize) < 0)
+        System_Error_Exit("getpeername() faild!");
+
+    const struct sockaddr *address = (struct sockaddr *)&localAddr;
+    void *numericAddress;
+    char addrBuffer[INET6_ADDRSTRLEN];
+    in_port_t ports;
+
+    switch(address->sa_family)
+    {
+        case AF_INET:
+            numericAddress = &((struct sockaddr_in*)address)->sin_addr;
+            ports = ntohs(((struct sockaddr_in*)address)->sin_port);
+            break;
+        case AF_INET6:
+            numericAddress = &((struct sockaddr_in6*)address)->sin6_addr;
+            ports = ntohs(((struct sockaddr_in6*)address)->sin6_port);
+            break;
+        default:
+            return -1;
+    }
+
+    if(inet_ntop(address->sa_family,numericAddress,addrBuffer,sizeof(addrBuffer)) == NULL)
+        return -1;
+    else
+        strcpy(Buffer, addrBuffer);
+}
+
+//获取本地端IP地址
+int Get_Address_Local(int sock_fd, char *Buffer)
+{
+    struct sockaddr_storage localAddr;
+    socklen_t addrSize = sizeof(localAddr);
+    if(getsockname(sock_fd, (struct sockaddr *)&localAddr,&addrSize) < 0)
         System_Error_Exit("getpeername() faild!");
 
     const struct sockaddr *address = (struct sockaddr *)&localAddr;

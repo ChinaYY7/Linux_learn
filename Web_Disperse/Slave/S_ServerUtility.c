@@ -3,7 +3,7 @@
 #include "TCP_Socket.h"
 
 //获取客户端配置
-void Get_Client_Config(char *server, char *service, int argc, char **argv)
+void Get_Server_Config(char *server, char *service, int argc, char **argv)
 {
     FILE *Config_file_fp;
     char addrBuffer[SERVICE_LEN];
@@ -30,4 +30,27 @@ void Get_Client_Config(char *server, char *service, int argc, char **argv)
     }
     else
         User_Error_Exit("wrong arguments","<Server Address> <Server Port>");
+}
+
+//回应浏览器的请求
+void Reponse_Browser(int Browser_Sock, const char *Browser_Port)
+{
+    ssize_t numBytesSent;
+    char buffer[50];
+    char buffer_tmp[100];
+    char addrbuffer[100];
+
+    printf("Recevie A Browser's Request\n");
+    memset(buffer, 0, sizeof(buffer));
+
+    sprintf(buffer, "HTTP/1.0 200 OK\r\n");
+    strcat(buffer, "Content-Type: text/html\r\n\r\n");
+
+    Get_Address_Local(Browser_Sock,addrbuffer);
+    sprintf(buffer_tmp,"Slave_Server(%s:%s) at your service......\r\n\r\n",addrbuffer,Browser_Port);    
+    strcat(buffer, buffer_tmp);
+    
+    numBytesSent = TCP_nSend(Browser_Sock, buffer, strlen(buffer));
+
+    close(Browser_Sock);
 }

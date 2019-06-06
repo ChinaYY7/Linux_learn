@@ -70,8 +70,8 @@ int GetNextMsg_Return_Value(FILE *in, const char *str)
 {
     if(feof(in)) 
     {
-        printf("read %s disconnect\n", str);
-        System_Error("fread()");
+        //printf("read %s disconnect\n", str);
+        //System_Error("fread()");
         return FREAD_EOF;
     }    
     else if(ferror(in))
@@ -98,17 +98,12 @@ int GetNextMsg(FILE *in, uint8_t *buf, size_t buffsize)
     
     if(read_msize_sta)
     {
-        //printf("\nread msize\n");
         rnt = fread(&msize, sizeof(uint16_t), 1, in);
         read_count++;
         msize = ntohs(msize);
-        //printf("rnt = %d, msize(%d) = %d\n",rnt, read_count,msize);
         if(rnt != 1)
-        {
-            //printf("fread misze rnt = %d, errno = %d ", rnt, errno);
             return GetNextMsg_Return_Value(in, "msize");
-        }
-
+    
         read_msize_sta = 0;
         read_buf_sta = 1;
 
@@ -121,9 +116,7 @@ int GetNextMsg(FILE *in, uint8_t *buf, size_t buffsize)
     }
     if(read_buf_sta)
     {
-       // printf("read buf\n");
         rnt = fread(buf, sizeof(uint8_t), msize, in);
-        //printf("rnt = %d\n",rnt);
         if(rnt < msize)
         {
             while(GetNextMsg_Return_Value(in, "buf") == FREAD_ERROR)
@@ -131,11 +124,9 @@ int GetNextMsg(FILE *in, uint8_t *buf, size_t buffsize)
                 buf+=rnt;
                 msize = msize - rnt;
                 rnt = fread(buf, sizeof(uint8_t), msize, in);
-                //printf("rnt = %d\n",rnt);
                 if(rnt == msize)
                     break;
             }
-            //printf("fread buf rnt = %d, errno = %d ", rnt, errno);
         }
 
         read_buf_sta = 0;

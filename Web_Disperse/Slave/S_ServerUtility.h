@@ -5,7 +5,7 @@
 #include <netdb.h>
 
 #define CONFIG_PATH "./config/connect.config"
-#define TMP_Path "./temp/temp"
 
-void Get_Client_Config(char *server, char *service, int argc, char **argv);
+void Get_Server_Config(char *server, char *service, int argc, char **argv);
+void Reponse_Browser(int Browser_Sock, const char *Browser_Port);
 #endif
