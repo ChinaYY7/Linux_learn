@@ -21,19 +21,35 @@ struct userDevice{
 
     u_int8_t bInEndpointAddress; 	//输入端口
     u_int8_t bOutEndpointAddress;   //输出端口
+	
+    libusb_device *dev;	            //设备标识
+    struct libusb_device_descriptor dev_desc; //设备描述符
 
-    /*save parameter*/ 	
-    libusb_device *dev;	
-    libusb_device **devs; 
+    libusb_device_handle* usb_handle; //设备句柄
+
+    uint8_t bus;
+    uint8_t address;
+
+    Bool online;
+    
     
     /* Number of this interface */	
     uint8_t  bInterfaceNumber;      //接口数
 };
 
-int Find_device(struct libusb_device_descriptor *dev_desc,struct userDevice *user_device);
+int Find_device(struct userDevice *user_device);
 int match_with_endpoint(const struct libusb_interface_descriptor * interface, struct userDevice *user_device);
 int get_device_endpoint(struct libusb_device_descriptor *dev_desc,struct userDevice *user_device);
-
+int LIBUSB_CALL usb_event_callback(libusb_context *ctx, libusb_device *dev, libusb_hotplug_event event, void *user_data);
+int Open_device(struct userDevice *user_device);
+int Fill_UserDevice_Info(struct userDevice *user_device, libusb_device *dev, struct libusb_device_descriptor dev_desc);
+void Display_Device_Info(struct userDevice *user_device);
+void Init_Struct_userDevice(struct userDevice *user_device);
+int Register_Hotplug(libusb_context *ctx, int vendor_id, int product_id, struct userDevice *user_device);
+void Signal_Deal_Ctc(void);
+void StrToByte_stream(unsigned char *str_o, unsigned char *str_d);
+void Byte_streamToStr(unsigned char *str_o, unsigned char *str_d);
+int Examine_Cmd(unsigned char *str);
 #endif
 
 
