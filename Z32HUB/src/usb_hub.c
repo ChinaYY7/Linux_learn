@@ -1,63 +1,81 @@
 #include <pthread.h>
 #include <signal.h>
 #include "usb_hub.h"
-#define DEBUG 0
 
-uint8_t Connect_Sta = 0;
+struct userDevice user_device;
+libusb_context *ctx = NULL; 
 
 //初始化结构体
-void Init_Struct_userDevice(struct userDevice *user_device)
+void Init_Struct_userDevice(void)
 {
-    user_device->online = False;
-    user_device->idProduct = USB_PRODUCT_ID;	
-    user_device->idVendor =  USB_VENDOR_ID ;	
-    user_device->bInterfaceClass = LIBUSB_CLASS_HID ;	
-    user_device->bInterfaceSubClass = LIBUSB_CLASS_HID ;	
-    user_device->bmAttributes = LIBUSB_TRANSFER_TYPE_INTERRUPT ;	
-    user_device->dev = NULL;
+    user_device.online = False;
+    user_device.idProduct = USB_PRODUCT_ID;	
+    user_device.idVendor =  USB_VENDOR_ID ;	
+    user_device.bInterfaceClass = LIBUSB_CLASS_HID ;	
+    user_device.bInterfaceSubClass = LIBUSB_CLASS_HID ;	
+    user_device.bmAttributes = LIBUSB_TRANSFER_TYPE_INTERRUPT ;	
+    user_device.dev = NULL;
 }
 
 //显示设备信息
-void Display_Device_Info(struct userDevice *user_device)
+void Display_Device_Info(void)
 {
     printf("/******************Device Info**********************/\n");
-    printf("VID:0x%4x           PID:0x%4x\n",user_device->idVendor, user_device->idProduct);
-    printf("BUS:%d                Address:%d\n",user_device->bus, user_device->address);
-    printf("IN :0x%2x             Out:0x%02x\n",user_device->bInEndpointAddress, user_device->bOutEndpointAddress);
+    printf("VID:0x%4x           PID:0x%4x\n",user_device.idVendor, user_device.idProduct);
+    printf("BUS:%d                Address:%d\n",user_device.bus, user_device.address);
+    printf("IN :0x%2x             Out:0x%02x\n",user_device.bInEndpointAddress, user_device.bOutEndpointAddress);
     printf("/**************************************************/\n");
+}
+
+int Init_USB(void)
+{
+    int ret;
+    
+     //初始化USB
+    ret = libusb_init(&ctx);
+    if(ret < 0)
+    {
+        printf("*** initial USB lib failed!");
+        return -1;
+    }
+    
+    //初始化用户设备信息
+    Init_Struct_userDevice();
+
+    return 0;
+}
+
+void Close_USB(void)
+{
+    //libusb_exit(ctx);
+    libusb_close(user_device.usb_handle);
+    libusb_release_interface(user_device.usb_handle,user_device.bInterfaceNumber);
 }
 
 //找到输入输出端口
 //输入输出都找到返回1，否则返回0
-int match_with_endpoint(const struct libusb_interface_descriptor *interface, struct userDevice *user_device)
+int match_with_endpoint(const struct libusb_interface_descriptor *interface)
 {	
     int i;	
     int ret=0;
-#if DEBUG == 1
-    printf("bNumEndpoints:%d\n",interface->bNumEndpoints);
-#endif	
+
+    //printf("bNumEndpoints:%d\n",interface->bNumEndpoints);
     for(i=0;i<interface->bNumEndpoints;i++)	//遍历端点
     {
-#if DEBUG == 1
-        printf("endpoint[%d].bmAttributes = %x\n",i,interface->endpoint[i].bmAttributes);
-#endif	
-        if((interface->endpoint[i].bmAttributes&0x03)==user_device->bmAttributes)   //找到对应传输模式的端口transfer type :bulk ,control, interrupt		
+        //printf("endpoint[%d].bmAttributes = %x\n",i,interface->endpoint[i].bmAttributes);
+	    if((interface->endpoint[i].bmAttributes&0x03)==user_device.bmAttributes)   //找到对应传输模式的端口transfer type :bulk ,control, interrupt		
         {				
             if(interface->endpoint[i].bEndpointAddress&0x80)					//输入端口				
             {					
                 ret|=1;					
-                user_device->bInEndpointAddress = interface->endpoint[i].bEndpointAddress;
-#if DEBUG == 1               
-                printf("endpoint[%x]: is input\n", interface->endpoint[i].bEndpointAddress);
-#endif
+                user_device.bInEndpointAddress = interface->endpoint[i].bEndpointAddress;
+                //printf("endpoint[%x]: is input\n", interface->endpoint[i].bEndpointAddress);
             }				
             else		                                                        //输出端口		
             {					
                 ret|=2;					
-                user_device->bOutEndpointAddress = interface->endpoint[i].bEndpointAddress;
-#if DEBUG == 1
-                printf("endpoint[%x] is output\n", interface->endpoint[i].bEndpointAddress);
-#endif
+                user_device.bOutEndpointAddress = interface->endpoint[i].bEndpointAddress;
+                //printf("endpoint[%x] is output\n", interface->endpoint[i].bEndpointAddress);
             }		
         }											
     }	
@@ -69,46 +87,36 @@ int match_with_endpoint(const struct libusb_interface_descriptor *interface, str
 
 //找到对应传输模式的端点
 //成功返回0，失败返回-1；
-int get_device_endpoint(struct libusb_device_descriptor *dev_desc,struct userDevice *user_device)
+int get_device_endpoint(struct libusb_device_descriptor *dev_desc)
 {		
     int ret = -2;	
     int i,j,k;	
     struct libusb_config_descriptor *conf_desc;	
     u_int8_t isFind = 0;
 
-#if DEBUG == 1
-    printf("bNumConfigurations:%d\n",dev_desc->bNumConfigurations);
-#endif	
-
+    //printf("bNumConfigurations:%d\n",dev_desc->bNumConfigurations);
     for (i=0; i< dev_desc->bNumConfigurations; i++)	//遍历配置描述符
     {		
-        if(user_device->dev != NULL)			
-            ret = libusb_get_config_descriptor(user_device->dev,i,&conf_desc);		
+        if(user_device.dev != NULL)			
+            ret = libusb_get_config_descriptor(user_device.dev,i,&conf_desc);		
         if(ret < 0) 
         {			
             printf("*** libusb_get_config_descriptor failed! \n");    			
             return -1;		
         }
 
-#if DEBUG == 1        
-        printf("bNumInterfaces:%d\n",conf_desc->bNumInterfaces);
-#endif
+        //printf("bNumInterfaces:%d\n",conf_desc->bNumInterfaces);
         for (j=0; j< conf_desc->bNumInterfaces; j++)	//遍历接口描述符	
         {
-
-#if DEBUG == 1           			
-            printf("num_altsetting:%d\n",conf_desc->interface[j].num_altsetting);
-#endif
+		    //printf("num_altsetting:%d\n",conf_desc->interface[j].num_altsetting);
             for (k=0; k < conf_desc->interface[j].num_altsetting; k++)			
             {
-#if DEBUG == 1
-                printf("interface[%d].altsetting[%d].bInterfaceClass = %d\n",j,k,conf_desc->interface[j].altsetting[k].bInterfaceClass);
-#endif
-                if(conf_desc->interface[j].altsetting[k].bInterfaceClass==user_device->bInterfaceClass)	 //找到对应接口模式的接口HID，print等			
+                //printf("interface[%d].altsetting[%d].bInterfaceClass = %d\n",j,k,conf_desc->interface[j].altsetting[k].bInterfaceClass);
+                if(conf_desc->interface[j].altsetting[k].bInterfaceClass==user_device.bInterfaceClass)	 //找到对应接口模式的接口HID，print等			
                 {					
-                    if(match_with_endpoint(&(conf_desc->interface[j].altsetting[k]), user_device))					
+                    if(match_with_endpoint(&(conf_desc->interface[j].altsetting[k])))					
                     {						
-                        user_device->bInterfaceNumber = conf_desc->interface[j].altsetting[k].bInterfaceNumber;
+                        user_device.bInterfaceNumber = conf_desc->interface[j].altsetting[k].bInterfaceNumber;
                         libusb_free_config_descriptor(conf_desc);						
                         ret = 0;						
                         return ret;					
@@ -122,48 +130,50 @@ int get_device_endpoint(struct libusb_device_descriptor *dev_desc,struct userDev
 
 
 //打开设备，申请接口
-int Open_device(struct userDevice *user_device)
+int Open_device(void)
 {
     int ret;
-    user_device->usb_handle = libusb_open_device_with_vid_pid(NULL, user_device->idVendor, user_device->idProduct);
+    user_device.usb_handle = libusb_open_device_with_vid_pid(NULL, user_device.idVendor, user_device.idProduct);
 
-    if(user_device->usb_handle == NULL) 
+    if(user_device.usb_handle == NULL) 
     {		
         printf("*** Permission denied or Can not find the USB board (Maybe the USB driver has not been installed correctly), quit!\n");		
         return -1;	
     } 	
     
     //检测设备驱动是否被占用，若占用先卸载再重新安装
-    if(libusb_kernel_driver_active(user_device->usb_handle, 0) == 1) 
+    if(libusb_kernel_driver_active(user_device.usb_handle, 0) == 1) 
     { 
         printf("kernel driver active\n");
-        if(libusb_detach_kernel_driver(user_device->usb_handle, 0) == 0) //detach it
+        if(libusb_detach_kernel_driver(user_device.usb_handle, 0) == 0) //detach it
             printf("kernel driver detach\n");
     }
-    ret = libusb_claim_interface(user_device->usb_handle, 0); //声明接口，通常只有一个接口，默认为0
+
+    //声明接口
+    ret = libusb_claim_interface(user_device.usb_handle, 0); //声明接口，通常只有一个接口，默认为0
     if (ret < 0) 
     {
         printf("libusb_claim_interface failed:  %s\n", libusb_error_name(ret));
         return -2;
     }
-    user_device->online = True;
+    user_device.online = True;
     
     return 0;
 }
 
 //填充设备信息
-int Fill_UserDevice_Info(struct userDevice *user_device, libusb_device *dev, struct libusb_device_descriptor dev_desc)
+int Fill_UserDevice_Info(libusb_device *dev, struct libusb_device_descriptor dev_desc)
 {
     int ret;
-    user_device->dev = dev;			
-    user_device->dev_desc = dev_desc;
-    user_device->bus = libusb_get_bus_number(dev);
-    user_device->address = libusb_get_device_address(dev);
-    ret = get_device_endpoint(&dev_desc,user_device);
+    user_device.dev = dev;			
+    user_device.dev_desc = dev_desc;
+    user_device.bus = libusb_get_bus_number(dev);
+    user_device.address = libusb_get_device_address(dev);
+    ret = get_device_endpoint(&dev_desc);
     if(ret < 0)
     {
         return -1;
-        user_device->online = False;
+        user_device.online = False;
     }
         
     return 0;    
@@ -171,7 +181,7 @@ int Fill_UserDevice_Info(struct userDevice *user_device, libusb_device *dev, str
 
 //找到设备，并找到对应的输入输出端点
 //成功返回0，出错返回-1,未找到返回-2
-int Find_device(struct userDevice *user_device)
+int Find_device(void)
 {	
     int ret = -2;	
     ssize_t cnt;	
@@ -182,7 +192,7 @@ int Find_device(struct userDevice *user_device)
 
     struct libusb_device_descriptor dev_desc;
     
-    cnt = libusb_get_device_list(NULL, &devs); //check the device number	
+    cnt = libusb_get_device_list(ctx, &devs); //check the device number	
     if (cnt < 0)		
         return (int) cnt; 	
         
@@ -197,15 +207,15 @@ int Find_device(struct userDevice *user_device)
         ret = libusb_get_device_descriptor(dev,&dev_desc);
         if(ret < 0) 
             return -1;		
-        if(dev_desc.idProduct==user_device->idProduct && dev_desc.idVendor==user_device->idVendor)		
+        if(dev_desc.idProduct==user_device.idProduct && dev_desc.idVendor==user_device.idVendor)		
         {			
             libusb_free_device_list(devs, 1);
-            Fill_UserDevice_Info(user_device, dev, dev_desc);
-            Open_device(user_device);
+            Fill_UserDevice_Info(dev, dev_desc);
+            Open_device();
             return 0;
         }
         else
-            user_device->online = False;
+            user_device.online = False;
     }
 }
 
@@ -217,27 +227,82 @@ void *usb_monitor_thread(void *arg)
     printf("usb monitor thread started.\n");
     while (1) 
     {
-        ret = libusb_handle_events(NULL);
+        ret = libusb_handle_events(ctx);
         if (ret < 0)
             printf("libusb_handle_events() failed: %s\n", libusb_error_name(ret));
     }  
 }
 
+//usb 热插拔回调函数
+int LIBUSB_CALL usb_event_callback(libusb_context *ctx, libusb_device *dev, libusb_hotplug_event event, void *user_data) 
+{
+    struct libusb_device_descriptor dev_desc;
+    int ret;
+    
+    printf("\nUSB Hotplugin Event.\n");
+
+    ret = libusb_get_device_descriptor(dev, &dev_desc);
+    if (LIBUSB_SUCCESS != ret) 
+        printf("error getting device descriptor.\n");
+    
+    //设备插入
+    if (LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED == event) 
+    {
+        printf("USB device attached: %04x:%04x\n", dev_desc.idVendor, dev_desc.idProduct);
+        
+        //关闭之前设备断开后可能未能关闭的设备句柄
+        if (user_device.usb_handle) 
+        {
+            libusb_close(user_device.usb_handle);
+            user_device.usb_handle = NULL;
+        }
+        
+        //重新打开设备获得新的设备句柄
+        ret = Open_device();
+        if (ret < 0)
+        {
+            printf ("error opening device.\n");
+            return -1;
+        }
+        //填充信息 
+        ret = Fill_UserDevice_Info(dev, dev_desc);
+        if (ret < 0)
+        {
+            printf ("error fill info.\n");
+            return -1;
+        }
+        Display_Device_Info();
+    }        
+    //设备拔出
+    else if (LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT == event) 
+    {
+        printf("usb device removed: %04x:%04x\n", dev_desc.idVendor, dev_desc.idProduct);
+        if (user_device.usb_handle) 
+        {           
+            libusb_close(user_device.usb_handle);
+            user_device.online = False;
+            user_device.usb_handle = NULL;
+        }
+    }
+
+    return 0;
+}
+
 //启用热插拔功能
 //返回-2，不支持，-1，启用失败
-int Register_Hotplug(libusb_context *ctx, int vendor_id, int product_id, struct userDevice *user_device)
+int Register_Hotplug(void)
 {
     int ret;
     //检查是否支持热插拔
     if (!libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG)) 
     {
         printf("hotplug capabilites are not supported on this platform.\n");
-        libusb_exit (ctx);
+        libusb_exit(ctx);
         return -2;
     }
 
     //注册热插拔事件
-    ret = libusb_hotplug_register_callback(ctx, LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED | LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT, LIBUSB_HOTPLUG_NO_FLAGS, vendor_id, product_id, LIBUSB_HOTPLUG_MATCH_ANY, usb_event_callback, (void *)user_device, NULL);
+    ret = libusb_hotplug_register_callback(ctx, LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED | LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT, LIBUSB_HOTPLUG_NO_FLAGS, user_device.idVendor, user_device.idProduct, LIBUSB_HOTPLUG_MATCH_ANY, usb_event_callback, NULL, NULL);
     if (LIBUSB_SUCCESS != ret) 
     {
         printf("error registering callback: %s\n", libusb_error_name(ret));
@@ -257,179 +322,48 @@ int Register_Hotplug(libusb_context *ctx, int vendor_id, int product_id, struct 
     return 0;
 }
 
-//usb 热插拔回调函数
-int LIBUSB_CALL usb_event_callback(libusb_context *ctx, libusb_device *dev, libusb_hotplug_event event, void *user_data) 
+//检测设备是否处于连接状态
+int Detect_Device_Connect_sta(void)
 {
-    struct libusb_device_descriptor dev_desc;
+    if(user_device.online = False)
+        return 0;
+    else
+        return 1;
+}
+
+//发送数据
+//发送成功返回实际发送的字节数，失败返回-1
+int Send_Date(unsigned char *str, int len)
+{
     int ret;
-    struct userDevice *user_device = (struct userDevice *)user_data;
+    int length;
+
+    ret = libusb_interrupt_transfer(user_device.usb_handle,user_device.bOutEndpointAddress,str,len,&length,1000);
+    if(ret < 0) 
+    {		
+        printf("   %s\n", libusb_error_name(ret));
+        printf("*** interrupt_transfer_out failed! \n");    		
+        return -1;	
+    }
+
+    return length;
+}
+
+//接收数据
+//接收成功返回实际接收的字节数，失败返回-1
+int Recv_Date(unsigned char *str, int len)
+{
+    int ret;
+    int length;
     
-    printf("\nusb hotplugin event.\n");
-
-    ret = libusb_get_device_descriptor(dev, &dev_desc);
-    if (LIBUSB_SUCCESS != ret) 
-        printf("error getting device descriptor.\n");
-    
-    //设备插入
-    if (LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED == event) 
-    {
-        printf("usb device attached: %04x:%04x\n", dev_desc.idVendor, dev_desc.idProduct);
-        
-        //关闭之前设备断开后可能未能关闭的设备句柄
-        if (user_device->usb_handle) 
-        {
-            libusb_close(user_device->usb_handle);
-            user_device->usb_handle = NULL;
-        }
-        
-        //重新打开设备获得新的设备句柄
-        ret = Open_device(user_device);
-        if (ret < 0)
-        {
-            printf ("error opening device.\n");
-            return -1;
-        }
-        //填充信息 
-        ret = Fill_UserDevice_Info(user_device, dev, dev_desc);
-        if (ret < 0)
-        {
-            printf ("error fill info.\n");
-            return -1;
-        }
-        Display_Device_Info(user_device);
-        Connect_Sta = 1;
-    }        
-    //设备拔出
-    else if (LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT == event) 
-    {
-        printf("usb device removed: %04x:%04x\n", dev_desc.idVendor, dev_desc.idProduct);
-        if (user_device->usb_handle) 
-        {           
-            libusb_close(user_device->usb_handle);
-            user_device->online = False;
-            user_device->usb_handle = NULL;
-        }
-        Connect_Sta = 0;
+    ret = libusb_interrupt_transfer(user_device.usb_handle,user_device.bInEndpointAddress,str,len,&length,5000);
+    if(ret < 0) 
+    {		
+        printf("   %s\n", libusb_error_name(ret));
+        printf("*** interrupt_transfer_in failed! \n");    		
+        return -1;	
     }
 
-    return 0;
+    return length;
 }
-
-
-//ctrl+c 信号处理函数
-void sigint_handler(int sig)
-{
-    printf("\nZ32HUB Exit!!!\n");	
-    exit(0);
-}
-
-//ctrl+c 信号处理
-void Signal_Deal_Ctc(void)
-{
-    //修改ctrl+c 信号的处理
-    struct sigaction act;
-    act.sa_handler = sigint_handler;
-    sigemptyset(&act.sa_mask);
-    act.sa_flags = 0;
-    sigaction(SIGINT, &act, NULL);
-}
-
-//字符串转hex流
-void StrToByte_stream(unsigned char *str_o, unsigned char *str_d)
-{
-    unsigned char len = strlen(str_o);
-    int i = 0, j = 1;
-    int high_sta = 1;
-    int temp;
-
-    printf("%s thransfer:\n", str_o);
-    str_d[0] = 0xc0 | (len / 2);
-    printf("%x ", str_d[0]);
-
-    while(i < 32)
-    {
-        if(high_sta)
-        {
-            if(str_o[i] < 58)
-                temp = str_o[i]-48;
-            else if(str_o[i] < 91)
-                temp = str_o[i]-55;
-            else if(str_o[i] < 123)
-                temp = str_o[i]-87;
-
-            str_d[j] = (temp << 4) & 0xf0;
-            i++;
-            high_sta = 0;
-        }
-        else
-        {
-            if(str_o[i] < 58)
-                temp = str_o[i]-48;
-            else if(str_o[i] < 91)
-                temp = str_o[i]-55;
-            else if(str_o[i] < 123)
-                temp = str_o[i]-87;
-
-            str_d[j] |= (temp & 0x0f);
-            printf("%02x ", str_d[j]);
-            j++;
-            i++;
-            high_sta = 1;
-        }
-    }
-    printf("\n");
-}
-
-//hex流转字符串
-void Byte_streamToStr(unsigned char *str_o, unsigned char *str_d)
-{
-    unsigned char len ;
-    int i = 0, j = 1;
-    int high_sta = 1;
-    unsigned char temp;
-
-    len = str_o[0] & 0x0f;
-    //printf("len = %d\n", len);
-
-    while(i < len * 2)
-    {
-        if(high_sta)
-        {
-            temp = (str_o[j] >> 4) & 0x0f;
-            if(temp < 10)
-                str_d[i] = temp + 48;
-            else
-                str_d[i] = temp + 87;
-            i++;
-            high_sta = 0;
-        }
-        else
-        {
-            temp = str_o[j] & 0x0f;
-            if(temp < 10)
-                str_d[i] = temp + 48;
-            else
-                str_d[i] = temp + 87;
-            i++;
-            j++;
-            high_sta = 1;
-        }
-    }
-    str_d[i] = '\0';
-}
-
-int Examine_Cmd(unsigned char *str)
-{
-    int len = strlen(str);
-    int i = 0;
-
-    for(i = 0; i < len; i++)
-    {
-        if((str[i] >= '0' && str[i] <= '9') || (str[i] >= 'A' && str[i] <= 'Z') || (str[i] >= 'a' && str[i] <= 'z'))
-            return 0;
-        else
-            return -1;
-    }
-} 
-
 

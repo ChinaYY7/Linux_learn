@@ -1,9 +1,11 @@
 #include "Panel.h"
+#include "ICP209_cmd.h"
+
 const char Theme[20] = "ICP209";
 const char   END[20] = "******";
 const char Item1[20] = "输入命令";
-const char Item2[20] = "DEFAULT";
-const char Item3[20] = "DEFAULT";
+const char Item2[20] = "验证PIN";
+const char Item3[20] = "获取随机数";
 const char Item4[20] = "DEFAULT";
 const char Item5[20] = "DEFAULT";
 const char Item6[20] = "DEFAULT";
@@ -29,53 +31,75 @@ void Display_Panel(void)
     printf("/**********************%s**********************/\n",END);
 }
 
-int Command_Mode(struct userDevice user_device)
+int Examine_Cmd(unsigned char *str)
+{
+    int len = strlen(str);
+    int i = 0;
+
+    for(i = 0; i < len; i++)
+    {
+        if((str[i] >= '0' && str[i] <= '9') || (str[i] >= 'A' && str[i] <= 'Z') || (str[i] >= 'a' && str[i] <= 'z'))
+            return 0;
+        else
+            return -1;
+    }
+} 
+
+int Command_Mode(void)
 {
     int ret;
     int length; 
-    int examine_sta = 0;	
-    unsigned char Send_cmd[16] = "4000010188";
-    unsigned char Send_cmd_temp[33];
-    unsigned char Recv_date[16];
-    unsigned char Recv_date_temp[33];
+    int examine_sta = 0;
+    int str_len;
+    int cmd_sta;	
+
+    unsigned char Send_str[33];
+    unsigned char Recv_str[64];
+    unsigned char Recv_str_tmp[64];
     system("clear"); 
     while(1)
     {
         printf("输入指令(<exit>退出)：");
-        scanf("%s", Send_cmd_temp);
+        scanf("%s", Send_str);
 
-        if(strcmp(Send_cmd_temp, "exit") == 0)
+        if(strcmp(Send_str, "exit") == 0)
             break;
 
-        examine_sta = Examine_Cmd(Send_cmd_temp);
+        examine_sta = Examine_Cmd(Send_str);
         if(examine_sta < 0)
         {
             printf("指令有误！\n");
             continue;
         }
 
-        StrToByte_stream(Send_cmd_temp, Send_cmd);
-        ret = libusb_interrupt_transfer(user_device.usb_handle,user_device.bOutEndpointAddress,Send_cmd,16,&length,1000);
-        if(ret < 0) 
-        {		
-            printf("   %s\n", libusb_error_name(ret));
-            printf("*** interrupt_transfer_out failed! \n");    		
-            return -1;	
-        }
+        length = Send_Cmd(Send_str,16);
+        if(length < 0) 
+            printf("*** Send_Cmd failed! \n");    		
         else
-            printf("Send_cmd(%d bytes): %s\n", length, Send_cmd_temp);
+            printf("Send_Cmd(%d bytes): %s\n", length, Send_str);
 
-        ret = libusb_interrupt_transfer(user_device.usb_handle,user_device.bInEndpointAddress,Recv_date,16,&length,5000);
-        if(ret < 0) 
-        {		
-            printf("   %s\n", libusb_error_name(ret));
-            printf("*** interrupt_transfer_int failed! \n");    		
-            return -1;	
+        if(strcmp(Send_str,"01") == 0)
+        {
+            length = Recv_Value(Recv_str_tmp,16);
+            strcpy(Recv_str,Recv_str_tmp);
+            
+            length+=Recv_Value(Recv_str_tmp,16);
+            strcat(Recv_str, Recv_str_tmp);
         }
         else
-        {
-            Byte_streamToStr(Recv_date,Recv_date_temp);
-            printf("Recv_date(%d bytes): %s\n", length, Recv_date_temp);
-        }
+            length = Recv_Value(Recv_str,16);
+
+        cmd_sta = Get_Cmd_Sta(Recv_str);
+        if(cmd_sta == -1)
+            strcat(Recv_str,"  指令执行失败！");
+        else if(cmd_sta == -2)
+            strcat(Recv_str,"  指令不支持！");
+        else
+            strcat(Recv_str,"  指令执行成功！"); 
+    
+        if(length < 0) 
+            printf("*** Recv_Value failed! \n");    			
+        else
+            printf("Recv_Value(%d bytes): %s\n", length, Recv_str);
     } 
 }
