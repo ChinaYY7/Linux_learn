@@ -7,12 +7,12 @@ const char Item1[20] = "输入命令  ";
 const char Item2[20] = "验证PIN";
 const char Item3[20] = "获取随机数";
 const char Item4[20] = "生成公私钥对";
-const char Item5[20] = "DEFAULT";
-const char Item6[20] = "DEFAULT";
-const char Item7[20] = "DEFAULT";
-const char Item8[20] = "DEFAULT";
-const char Item9[20] = "DEFAULT";
-const char Item10[20] = "DEFAULT";
+const char Item5[20] = "生成证书  ";
+const char Item6[20] = "读取证书";
+const char Item7[20] = "非对称认证";
+const char Item8[60] = "设置对称认证密钥";
+const char Item9[20] = "对称认证  ";
+const char Item10[20] = "设置读写密钥";
 
 void Display_Panel(void)
 {
@@ -72,7 +72,8 @@ int Command_Mode(void)
             continue;
         }
 
-        length = Send_Cmd(Send_str,16);
+        length = Send_Cmd(Send_str);
+        /* 
         if(length < 0) 
             printf("*** Send_Cmd failed! \n");    		
         else
@@ -101,5 +102,6 @@ int Command_Mode(void)
             printf("*** Recv_Value failed! \n");    			
         else
             printf("Recv_Value(%d bytes): %s\n", length, Recv_str);
+            */
     } 
 }
