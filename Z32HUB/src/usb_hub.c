@@ -325,7 +325,7 @@ int Register_Hotplug(void)
 //检测设备是否处于连接状态
 int Detect_Device_Connect_sta(void)
 {
-    if(user_device.online = False)
+    if(user_device.online == False)
         return 0;
     else
         return 1;

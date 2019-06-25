@@ -3,10 +3,10 @@
 
 const char Theme[20] = "ICP209";
 const char   END[20] = "******";
-const char Item1[20] = "输入命令";
+const char Item1[20] = "输入命令  ";
 const char Item2[20] = "验证PIN";
 const char Item3[20] = "获取随机数";
-const char Item4[20] = "DEFAULT";
+const char Item4[20] = "生成公私钥对";
 const char Item5[20] = "DEFAULT";
 const char Item6[20] = "DEFAULT";
 const char Item7[20] = "DEFAULT";
