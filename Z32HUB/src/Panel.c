@@ -13,6 +13,12 @@ const char Item7[20] = "非对称认证";
 const char Item8[60] = "设置对称认证密钥";
 const char Item9[20] = "对称认证  ";
 const char Item10[20] = "设置读写密钥";
+const char Item11[20] = "设置密文空间";
+const char Item12[20] = "加密读";
+const char Item13[20] = "加密写      ";
+const char Item14[20] = "明文读";
+const char Item15[20] = "明文写      ";
+const char Item16[20] = "DEFAULT";
 
 void Display_Panel(void)
 {
@@ -27,6 +33,12 @@ void Display_Panel(void)
     printf("08.%s\n", Item8);
     printf("09.%s          ", Item9);
     printf("10.%s\n", Item10);
+    printf("11.%s        ", Item11);
+    printf("12.%s\n", Item12);
+    printf("13.%s        ", Item13);
+    printf("14.%s\n", Item14);
+    printf("15.%s        ", Item15);
+    printf("16.%s\n", Item16);
     printf("00.Exit\n");
     printf("/**********************%s**********************/\n",END);
 }
@@ -54,8 +66,8 @@ int Command_Mode(void)
     int cmd_sta;	
 
     unsigned char Send_str[33];
-    unsigned char Recv_str[64];
-    unsigned char Recv_str_tmp[64];
+    unsigned char Recv_str[128];
+    unsigned char Recv_str_tmp[128];
     system("clear"); 
     while(1)
     {
@@ -73,35 +85,21 @@ int Command_Mode(void)
         }
 
         length = Send_Cmd(Send_str);
-        /* 
+        
         if(length < 0) 
             printf("*** Send_Cmd failed! \n");    		
         else
             printf("Send_Cmd(%d bytes): %s\n", length, Send_str);
 
-        if(strcmp(Send_str,"01") == 0)
+        length = Recv_Value(Recv_str_tmp,128);
+        HextoStr(Recv_str_tmp, length, Recv_str);
+        if(length < 0)
         {
-            length = Recv_Value(Recv_str_tmp,16);
-            strcpy(Recv_str,Recv_str_tmp);
-            
-            length+=Recv_Value(Recv_str_tmp,16);
-            strcat(Recv_str, Recv_str_tmp);
-        }
+            Error_Detail();
+            printf("*** Recv_Value failed! \n");
+        } 
         else
-            length = Recv_Value(Recv_str,16);
-
-        cmd_sta = Get_Cmd_Sta(Recv_str);
-        if(cmd_sta == -1)
-            strcat(Recv_str,"  指令执行失败！");
-        else if(cmd_sta == -2)
-            strcat(Recv_str,"  指令不支持！");
-        else
-            strcat(Recv_str,"  指令执行成功！"); 
-    
-        if(length < 0) 
-            printf("*** Recv_Value failed! \n");    			
-        else
-            printf("Recv_Value(%d bytes): %s\n", length, Recv_str);
-            */
+            printf("Recv_str(%d bytes): %s\n", length, Recv_str);
+        
     } 
 }
